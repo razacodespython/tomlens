@@ -22,6 +22,18 @@ struct CompanionScreenCapture {
     let screenshotWidthInPixels: Int
     let screenshotHeightInPixels: Int
     let captureDecision: WindowCaptureDecision
+    /// Tiny 8-bit grayscale thumbnail for the local frame-difference trigger.
+    let grayscaleThumbnail: [UInt8]
+    let capturedAt: Date
+
+    var tutorFrame: TutorFrame {
+        TutorFrame(
+            jpegData: imageData,
+            widthInPixels: screenshotWidthInPixels,
+            heightInPixels: screenshotHeightInPixels,
+            capturedAt: capturedAt
+        )
+    }
 }
 
 enum CompanionScreenCaptureError: LocalizedError {
@@ -70,9 +82,10 @@ enum CompanionScreenCaptureUtility {
         )
     }
 
-    /// Captures the picked window only, as JPEG scaled to at most 1280 px.
+    /// Captures the picked window only, as JPEG scaled to at most `maxDimension` px.
     static func capturePickedWindowAsJPEG(
-        pickedSelection: PickedTradingWindowSelection?
+        pickedSelection: PickedTradingWindowSelection?,
+        maxDimension: Int = RecentFrameBuffer.frameMaximumDimension
     ) async throws -> CompanionScreenCapture {
         guard let pickedSelection else {
             throw CompanionScreenCaptureError.noWindowPicked
@@ -97,7 +110,6 @@ enum CompanionScreenCaptureUtility {
         let filter = SCContentFilter(desktopIndependentWindow: liveWindow)
 
         let configuration = SCStreamConfiguration()
-        let maxDimension = 1280
         let windowWidth = max(liveWindow.frame.width, 1)
         let windowHeight = max(liveWindow.frame.height, 1)
         let aspectRatio = windowWidth / windowHeight
@@ -129,8 +141,32 @@ enum CompanionScreenCaptureUtility {
             windowFrame: appKitFrame(fromScreenCaptureKitFrame: liveWindow.frame),
             screenshotWidthInPixels: configuration.width,
             screenshotHeightInPixels: configuration.height,
-            captureDecision: captureDecision
+            captureDecision: captureDecision,
+            grayscaleThumbnail: grayscaleThumbnail(of: cgImage),
+            capturedAt: Date()
         )
+    }
+
+    /// Downscales to FrameDifference's thumbnail size in 8-bit grayscale.
+    static func grayscaleThumbnail(of cgImage: CGImage) -> [UInt8] {
+        let width = FrameDifference.thumbnailWidth
+        let height = FrameDifference.thumbnailHeight
+        var pixels = [UInt8](repeating: 0, count: width * height)
+        let didDraw = pixels.withUnsafeMutableBytes { pixelBuffer -> Bool in
+            guard let context = CGContext(
+                data: pixelBuffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width,
+                space: CGColorSpaceCreateDeviceGray(),
+                bitmapInfo: CGImageAlphaInfo.none.rawValue
+            ) else { return false }
+            context.interpolationQuality = .low
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return didDraw ? pixels : []
     }
 
     /// SCWindow.frame uses Core Graphics global coordinates (top-left origin

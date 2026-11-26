@@ -71,6 +71,8 @@ final class CompanionManager: ObservableObject {
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
     /// Short-lived click-through drawings over the picked window.
     private let drawingOverlayController = TradingWindowDrawingOverlayController()
+    /// ~1 fps sampling, bar-close and sharp-change triggers while switched on.
+    private let tutorEventMonitor = TutorEventMonitor()
     /// When the current push-to-talk hold began, for the accidental-tap check.
     private var pushToTalkPressedAt: Date?
     /// Force-stops the mic if a hold exceeds the maximum (e.g. a missed key-up).
@@ -138,11 +140,13 @@ final class CompanionManager: ObservableObject {
         if switchedOn {
             globalPushToTalkShortcutMonitor.start()
             refreshPickableTradingWindows()
+            startTutorEventMonitor()
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
         } else {
             globalPushToTalkShortcutMonitor.stop()
+            tutorEventMonitor.stop()
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = nil
             pushToTalkMaximumHoldTask?.cancel()
@@ -193,8 +197,17 @@ final class CompanionManager: ObservableObject {
         isTomLensSwitchedOn = true
         globalPushToTalkShortcutMonitor.start()
         refreshPickableTradingWindows()
+        startTutorEventMonitor()
         overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
         isOverlayVisible = true
+    }
+
+    /// Starts ~1 fps sampling of the picked window and the automatic triggers.
+    private func startTutorEventMonitor() {
+        tutorEventMonitor.onAutomaticTrigger = { [weak self] trigger in
+            self?.handleAutomaticTrigger(trigger)
+        }
+        tutorEventMonitor.start(pickedSelection: { [weak self] in self?.pickedTradingWindow })
     }
 
     func clearDetectedElementLocation() {
@@ -206,6 +219,7 @@ final class CompanionManager: ObservableObject {
 
     func stop() {
         globalPushToTalkShortcutMonitor.stop()
+        tutorEventMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
 
@@ -427,145 +441,156 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    // MARK: - Companion Prompt
+    // MARK: - Tutor Prompt
 
-    private static let companionVoiceResponseSystemPrompt = """
-    you're tomlens, a view-only trading tutor that lives in the user's menu bar. the user just spoke to you via push-to-talk and you can see the one trading window they picked, nothing else. your reply will be spoken aloud via text-to-speech, so write the way you'd actually talk. this is an ongoing conversation — you remember everything they've said before.
+    /// The bundled ruleset (TutorRulesetPrompt.md), loaded once.
+    private static let tutorRuleset: String = {
+        guard let rulesetURL = Bundle.main.url(forResource: TutorPromptComposer.rulesetResourceName, withExtension: "md"),
+              let ruleset = try? String(contentsOf: rulesetURL, encoding: .utf8) else {
+            print("⚠️ TutorRulesetPrompt.md missing from the bundle; using the fallback ruleset")
+            return TutorPromptComposer.fallbackRuleset
+        }
+        return ruleset
+    }()
 
-    rules:
-    - default to one or two sentences. be direct and dense. BUT if the user asks you to explain more, go deeper, or elaborate, then go all out — give a thorough, detailed explanation with no length limit.
-    - all lowercase, casual, warm. no emojis.
-    - write for the ear, not the eye. short sentences. no lists, bullet points, markdown, or formatting — just natural speech.
-    - don't use abbreviations or symbols that sound weird read aloud. write "for example" not "e.g.", spell out small numbers.
-    - if the user's question relates to what's on their screen, reference specific things you see.
-    - if the screenshot doesn't seem relevant to their question, just answer the question directly.
-    - you can help with anything — coding, writing, general knowledge, brainstorming.
-    - never say "simply" or "just".
-    - don't read out code verbatim. describe what the code does or what needs to change conversationally.
-    - focus on giving a thorough, useful explanation. don't end with simple yes/no questions like "want me to explain more?" or "should i show you?" — those are dead ends that force the user to just say yes.
-    - instead, when it fits naturally, end by planting a seed — mention something bigger or more ambitious they could try, a related concept that goes deeper, or a next-level technique that builds on what you just explained. make it something worth coming back for, not a question they'd just nod to. it's okay to not end with anything extra if the answer is complete on its own.
+    /// Running session summary maintained by the model via <summary> tags.
+    private var rollingSessionSummary = ""
 
-    drawing on the chart:
-    you can briefly draw on the trading window to show what you mean. coordinates are pixels in the screenshot (the image is labeled with its dimensions), origin top-left, x rightward, y downward. when a drawing helps, append it at the very end, after your spoken text, as:
-    <draw>[{"type":"level","y":312,"label":"vwap"},{"type":"circle","x":640,"y":300,"r":40,"label":"fork"},{"type":"arrow","from":[600,420],"to":[640,300]},{"type":"point","x":700,"y":280,"label":"entry"}]</draw>
-    shapes: point, arrow, circle, level (a full-width horizontal price line). at most three shapes. if nothing needs drawing, append <draw>[]</draw>. never draw on order buttons or suggest clicking anything.
-    """
+    // MARK: - Tutor Turns
 
-    // MARK: - AI Response Pipeline
-
-    /// Captures a screenshot, sends it along with the transcript to the AI brain,
-    /// and plays the response aloud via Apple text-to-speech. The cursor stays in
-    /// the spinner/processing state until TTS audio begins playing.
-    /// the AI's response may end with a <draw>[...]</draw> tag: shapes are
-    /// drawn on a click-through overlay over the window and the first point
-    /// also drives the buddy cursor flight.
+    /// Push-to-talk: always answered (subject to the hourly cap).
     private func sendTranscriptToBrainWithScreenshot(transcript: String) {
-        currentResponseTask?.cancel()
-        speechSynthesizerClient.stopPlayback()
+        runTutorTurn(.pushToTalk(transcript: transcript))
+    }
+
+    /// Bar-close and sharp-change triggers: skipped while the user is talking
+    /// or waiting on a reply, while plan usage is paused, or when only the
+    /// calls reserved for push-to-talk are left this hour.
+    private func handleAutomaticTrigger(_ trigger: TutorTrigger) {
+        let isUserSpeakingOrWaiting = buddyDictationManager.isDictationInProgress
+            || currentResponseTask != nil
+            || speechSynthesizerClient.isPlaying
+        guard TutorTriggerPolicy.shouldSendAutomaticTrigger(
+            isSwitchedOn: isTomLensSwitchedOn,
+            isUserSpeakingOrWaiting: isUserSpeakingOrWaiting,
+            isPlanUsagePaused: CompanionBrain.isPlanUsagePaused(now: Date()),
+            remainingCallsThisHour: CompanionBrain.callRateLimiter.remainingCalls(now: Date())
+        ), !tutorEventMonitor.frameBuffer.frames.isEmpty else { return }
+        runTutorTurn(trigger)
+    }
+
+    /// One model call: the last 2-3 frames of the picked window (1024 px),
+    /// the ruleset + safety instructions, recent exchanges and the trigger.
+    /// The reply may carry <draw> (shown on the overlay), <summary> (kept as
+    /// the rolling summary) and <silent/> (nothing spoken).
+    private func runTutorTurn(_ trigger: TutorTrigger) {
+        if !trigger.isAutomatic {
+            currentResponseTask?.cancel()
+            speechSynthesizerClient.stopPlayback()
+        }
 
         currentResponseTask = Task {
-            // Stay in processing (spinner) state — no streaming text displayed
-            voiceState = .processing
+            if !trigger.isAutomatic { voiceState = .processing }
+            defer {
+                if !Task.isCancelled { currentResponseTask = nil }
+            }
 
             do {
                 guard isTomLensSwitchedOn else { return }
 
-                // Capture only the picked trading window (never the full screen)
-                let windowCapture = try await CompanionScreenCaptureUtility.capturePickedWindowAsJPEG(
-                    pickedSelection: pickedTradingWindow
-                )
+                // Push-to-talk gets a fresh frame of the picked window (never the full screen).
+                if !trigger.isAutomatic {
+                    let freshCapture = try await CompanionScreenCaptureUtility.capturePickedWindowAsJPEG(
+                        pickedSelection: pickedTradingWindow
+                    )
+                    tutorEventMonitor.record(freshCapture)
+                }
+                guard !Task.isCancelled, let latestCapture = tutorEventMonitor.latestCapture else { return }
 
-                guard !Task.isCancelled else { return }
-
-                // Build image labels with the actual screenshot pixel dimensions
-                // so the AI's coordinate space matches the image it sees. We
-                // scale from screenshot pixels to window points ourselves.
-                let dimensionInfo = " (image dimensions: \(windowCapture.screenshotWidthInPixels)x\(windowCapture.screenshotHeightInPixels) pixels)"
-                let labeledImages = [(data: windowCapture.imageData, label: windowCapture.label + dimensionInfo)]
-
-                // Pass conversation history so the AI remembers prior exchanges
+                let framesToSend = tutorEventMonitor.frameBuffer.framesToSend()
+                let requestTime = Date()
+                let labeledImages = framesToSend.enumerated().map { index, frame in
+                    (data: frame.jpegData, label: TutorPromptComposer.frameLabel(index: index, frame: frame, now: requestTime))
+                }
                 let historyForAPI = conversationHistory.map { entry in
                     (userPlaceholder: entry.userTranscript, assistantResponse: entry.assistantResponse)
                 }
 
                 let fullResponseText = try await CompanionBrain.requestResponse(
                     images: labeledImages,
-                    systemPrompt: Self.companionVoiceResponseSystemPrompt,
+                    systemPrompt: TutorPromptComposer.instructions(
+                        ruleset: Self.tutorRuleset,
+                        rollingSummary: rollingSessionSummary
+                    ),
                     conversationHistory: historyForAPI,
-                    userPrompt: transcript
+                    userPrompt: trigger.userPromptText
                 )
 
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, isTomLensSwitchedOn else { return }
 
-                // Split off the optional <draw> tag (screenshot pixel space)
+                // Drawings use the last frame's pixel space.
                 let screenshotSize = CGSize(
-                    width: windowCapture.screenshotWidthInPixels,
-                    height: windowCapture.screenshotHeightInPixels
+                    width: latestCapture.screenshotWidthInPixels,
+                    height: latestCapture.screenshotHeightInPixels
                 )
-                let (spokenText, drawing) = TutorDrawingParser.parse(
+                let (textWithoutDrawing, drawing) = TutorDrawingParser.parse(
                     responseText: fullResponseText,
                     screenshotSizeInPixels: screenshotSize
                 )
+                let parsedReply = TutorPromptComposer.parseReply(textWithoutDrawing)
+                if let updatedSummary = parsedReply.updatedSummary {
+                    rollingSessionSummary = updatedSummary
+                }
+                if parsedReply.isSilent {
+                    print("🤫 Tom stayed silent (\(trigger.journalName))")
+                    if !trigger.isAutomatic { voiceState = .idle }
+                    return
+                }
+                let spokenText = TutorResponseSafetyFilter.filtered(parsedReply.spokenText)
+
                 drawingOverlayController.show(
                     drawing,
-                    windowFrameInAppKitCoordinates: windowCapture.windowFrame,
+                    windowFrameInAppKitCoordinates: latestCapture.windowFrame,
                     pickedSelection: pickedTradingWindow
                 )
 
-                // Handle element pointing if the AI returned coordinates.
                 // Switch to idle BEFORE setting the location so the triangle
-                // becomes visible and can fly to the target. Without this, the
-                // spinner hides the triangle and the flight animation is invisible.
-                if drawing.primaryPoint != nil {
-                    voiceState = .idle
-                }
-
+                // becomes visible and can fly to the target.
                 if let pointCoordinate = drawing.primaryPoint {
-                    // The AI's coordinates are in the window screenshot's pixel
-                    // space (top-left origin). Map them onto the picked window.
-                    let globalLocation = TradingWindowCoordinateMapping.appKitGlobalPoint(
+                    voiceState = .idle
+                    detectedElementScreenLocation = TradingWindowCoordinateMapping.appKitGlobalPoint(
                         fromScreenshotPoint: pointCoordinate,
                         screenshotSizeInPixels: screenshotSize,
-                        windowFrameInAppKitCoordinates: windowCapture.windowFrame
+                        windowFrameInAppKitCoordinates: latestCapture.windowFrame
                     )
-
-                    detectedElementScreenLocation = globalLocation
-                    detectedElementDisplayFrame = windowCapture.windowFrame
-                    print("🎯 Drawing \(drawing.shapes.count) shape(s), pointing at (\(Int(pointCoordinate.x)), \(Int(pointCoordinate.y)))")
-                } else {
-                    print("🎯 Drawing \(drawing.shapes.count) shape(s), no point")
+                    detectedElementDisplayFrame = latestCapture.windowFrame
                 }
+                print("🎯 \(trigger.journalName): \(drawing.shapes.count) shape(s)")
 
-                // Save this exchange to conversation history (with the point tag
-                // stripped so it doesn't confuse future context)
                 conversationHistory.append((
-                    userTranscript: transcript,
+                    userTranscript: trigger.isAutomatic ? "[\(trigger.journalName) check]" : trigger.userPromptText,
                     assistantResponse: spokenText
                 ))
-
                 // Keep only the last 10 exchanges to avoid unbounded context growth
                 if conversationHistory.count > 10 {
                     conversationHistory.removeFirst(conversationHistory.count - 10)
                 }
 
-                print("🧠 Conversation history: \(conversationHistory.count) exchanges")
-
-                // Play the response via TTS. Keep the spinner (processing state)
-                // until the audio actually starts playing, then switch to responding.
-                if !spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    do {
-                        try speechSynthesizerClient.speakText(spokenText)
-                        // speakText returns once AVSpeechSynthesizer has started speaking
-                        voiceState = .responding
-                    } catch {
-                        print("⚠️ Text-to-speech error: \(error)")
-                    }
+                do {
+                    try speechSynthesizerClient.speakText(spokenText)
+                    voiceState = .responding
+                } catch {
+                    print("⚠️ Text-to-speech error: \(error)")
                 }
             } catch is CancellationError {
                 // User spoke again — response was interrupted
             } catch {
-                print("⚠️ Companion response error: \(error)")
-                speakResponseErrorFallback(error)
+                print("⚠️ Tutor response error (\(trigger.journalName)): \(error.localizedDescription)")
+                // Automatic checks stay quiet on errors unless they pause TomLens.
+                let pausesAutomaticCalls = (error as? ResponsesAPIError)?.pausesAutomaticCalls ?? false
+                if !trigger.isAutomatic || pausesAutomaticCalls {
+                    speakResponseErrorFallback(error)
+                }
             }
 
             if !Task.isCancelled {

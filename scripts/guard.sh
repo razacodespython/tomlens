@@ -138,6 +138,20 @@ require "drawing overlay follows the live SCWindow frame" 'fromScreenCaptureKitF
 forbid "no overlay ever takes mouse input" 'ignoresMouseEvents\s*=\s*false'
 forbid "no legacy [POINT] tag parsing" '\[POINT:'
 
+echo "== M7: event triggers, ruleset, never place orders =="
+if [ -f leanring-buddy/TutorRulesetPrompt.md ] && rg -q 'never place' leanring-buddy/TutorRulesetPrompt.md; then
+  echo "ok    ruleset bundled as a resource and forbids placing orders"
+else
+  echo "FAIL  leanring-buddy/TutorRulesetPrompt.md missing or lacks the no-orders rule"; failures=$((failures + 1))
+fi
+require "ruleset is loaded from the bundle" 'TutorPromptComposer\.rulesetResourceName' leanring-buddy/CompanionManager.swift
+require "app-level no-orders rule is always in the instructions" 'must never claim you did' leanring-buddy/TutorPromptComposer.swift
+require "spoken replies pass the order-claim safety filter" 'TutorResponseSafetyFilter\.filtered' leanring-buddy/CompanionManager.swift
+require "frame sampling captures only the picked window" 'capturePickedWindowAsJPEG\(pickedSelection:' leanring-buddy/TutorEventMonitor.swift
+require "frames are ~1024 px" 'frameMaximumDimension = 1024' leanring-buddy/TutorTriggerPolicy.swift
+require "automatic calls go through the trigger policy (cap headroom, pause)" 'TutorTriggerPolicy\.shouldSendAutomaticTrigger' leanring-buddy/CompanionManager.swift
+forbid "no order-entry or broker APIs" '(?i)placeorder|placeOCO|modifyorder|cancelorder|liquidateposition|tradovateapi|api\.tradovate|demo\.tradovateapi'
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys
