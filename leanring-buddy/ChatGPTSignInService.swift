@@ -316,7 +316,7 @@ final class ChatGPTSignInService: ObservableObject {
         guard let accessToken = try? await validPlanUsageAccessToken() else { return }
         var request = URLRequest(url: ChatGPTModelCatalog.modelsEndpoint)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (body, response) = try? await data(for: request),
+        guard let (body, response) = try? await Self.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return }
         availableModels = ChatGPTModelCatalog.listedModels(fromResponseBody: body)
         if let selectedModelSlug, availableModels.contains(where: { $0.slug == selectedModelSlug }) { return }
