@@ -61,6 +61,7 @@ struct TomLensStatusView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 switchRow
+                TomLensUpdateSection(usesMenuBarChrome: false)
                 chatGPTRow
                 windowRow
                 permissionsSection

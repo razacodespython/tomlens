@@ -845,7 +845,7 @@ final class CompanionManager: ObservableObject {
             sessionIdentifier: identifier,
             startedAt: startedAt,
             endedAt: endedAt,
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.7",
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.8",
             pickedWindowApplicationName: pickedTradingWindow?.applicationName,
             pickedWindowTitle: pickedTradingWindow?.windowTitle,
             transcript: relayTranscript,

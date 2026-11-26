@@ -211,7 +211,11 @@ forbid "ntfy topic is never printed" 'print\(.*[Tt]opic'
 forbid "webhook sender key is never printed" 'print\(.*(senderKey|webhookKey)'
 python3 - <<'PY_HOSTS' || failures=$((failures + 1))
 import re, pathlib, sys
-allowed_hosts = {"api.openai.com", "auth.openai.com", "chatgpt.com", "ntfy.sh", "127.0.0.1"}
+allowed_hosts = {
+    "api.openai.com", "auth.openai.com", "chatgpt.com", "ntfy.sh", "127.0.0.1",
+    "api.github.com", "github.com", "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com", "github-releases.githubusercontent.com",
+}
 found_hosts = set()
 for path in pathlib.Path("leanring-buddy").rglob("*.swift"):
     text = path.read_text()
@@ -223,6 +227,21 @@ if unexpected:
     sys.exit(1)
 print(f"ok    hardcoded hosts are on the allowlist ({sorted(found_hosts)})")
 PY_HOSTS
+
+echo "== 0.1.8: in-app update replaces Applications only =="
+require "menu offers Update TomLens" 'Update TomLens…' leanring-buddy/TomLensUpdatePolicy.swift
+require "panel shows the update section" 'TomLensUpdateSection' leanring-buddy/CompanionPanelView.swift
+require "status window shows the update section" 'TomLensUpdateSection' leanring-buddy/TomLensStatusWindowController.swift
+require "updater checks the TomLens bundle id" 'com.razacodespython.tomlens' leanring-buddy/TomLensUpdatePolicy.swift
+require "swap replaces only the Applications copy" '/Applications/TomLens.app' leanring-buddy/TomLensUpdatePolicy.swift
+require "swap clears the download attribute" 'xattr -cr' leanring-buddy/TomLensUpdatePolicy.swift
+require "update requests stay on the allowlist" 'TomNetworkAllowlist\.validate' leanring-buddy/TomLensUpdateController.swift
+require "release checks do not use the latest endpoint" 'releases/latest' leanring-buddy/TomNetworkAllowlist.swift
+require "GitHub release host is allowlisted" 'api.github.com' leanring-buddy/TomNetworkAllowlist.swift
+require "rate limit is a distinct fallback" 'rateLimited' leanring-buddy/TomLensUpdatePolicy.swift
+forbid "updater never resets privacy grants" 'tccutil' leanring-buddy leanring-buddyTests leanring-buddyUITests
+forbid "updater does not send an auth header" 'Authorization' leanring-buddy/TomLensUpdateController.swift
+forbid "updater does not store a github token" 'github-releases-read-token|githubTokenAccount' leanring-buddy
 
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))

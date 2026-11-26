@@ -6,7 +6,7 @@ You need macOS 14.2 or newer. The download is an unsigned app, so macOS will ask
 
 ## 1. Download and unzip
 
-1. Download `TomLens-unsigned.zip` from the GitHub Actions artifact (or the `v0.1.6-alpha` prerelease, if one is attached).
+1. Download `TomLens-unsigned.zip` from the GitHub Actions artifact (or the latest prerelease, if one is attached). `TomLens-unsigned.zip.sha256` or `SHA256SUMS` sits next to the zip.
 2. Double-click the zip. macOS expands it into `TomLens.app`.
 3. Drag `TomLens.app` into your **Applications** folder.
 
@@ -78,6 +78,14 @@ Each session is written on your Mac, under:
 `~/TomLens/journal`
 
 In Finder, choose **Go > Go to Folder…** and paste that path. Each folder is one session (named by date and time) with the frames it saw and text logs. Nothing is uploaded.
+
+## Update from the menu bar
+
+Click the TomLens menu-bar icon and choose **Update TomLens…**. TomLens looks for a newer public release. If GitHub cannot be reached, or it is busy, TomLens uses the newest `TomLens-unsigned` zip in Downloads, including a name like `TomLens-unsigned (1).zip`.
+
+It replaces only `/Applications/TomLens.app`, then opens that copy. It does not reset Screen Recording or your other permissions.
+
+The same **Update TomLens…** button is on the status window.
 
 ## Turn it off
 

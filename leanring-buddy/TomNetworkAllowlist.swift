@@ -3,7 +3,8 @@
 //  leanring-buddy
 //
 //  Outbound hosts TomLens may contact. ChatGPT sign-in and the Responses
-//  API, the one webhook host Raza configured, and ntfy.sh. Nothing else.
+//  API, the one webhook host Raza configured, and ntfy.sh. Nothing else,
+//  except GitHub release downloads for the in-app updater.
 //  The webhook sender key is not a host and never belongs in a URL.
 //
 
@@ -22,12 +23,24 @@ nonisolated enum TomNetworkAllowlist {
     ]
     static let ntfyHost = "ntfy.sh"
 
+    /// Release list and asset metadata. Paths are limited to this repo's releases.
+    static let githubReleaseAPIHost = "api.github.com"
+    static let gitHubReleaseRepositoryPath = "/repos/razacodespython/tomlens/releases"
+    /// Public release files. Only this repo's download path is requested; the other hosts are redirects.
+    static let githubDownloadHost = "github.com"
+    static let gitHubReleaseDownloadPath = "/razacodespython/tomlens/releases/download/"
+    static let githubReleaseAssetHosts: Set<String> = [
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "github-releases.githubusercontent.com",
+    ]
+
     /// https only. A configured webhook contributes its host and no other.
     static func isAllowed(_ url: URL, configuredWebhookURL: URL?) -> Bool {
         guard url.scheme?.lowercased() == "https" else { return false }
         guard let host = url.host?.lowercased(), !host.isEmpty else { return false }
         if url.user != nil || url.password != nil { return false }
-        if chatGPTAndOpenAIHosts.contains(host) || host == ntfyHost { return true }
+        if chatGPTAndOpenAIHosts.contains(host) || host == ntfyHost || isGitHubReleaseHost(host) { return true }
         guard let configuredWebhookURL,
               configuredWebhookURL.scheme?.lowercased() == "https",
               configuredWebhookURL.user == nil,
@@ -43,6 +56,36 @@ nonisolated enum TomNetworkAllowlist {
         guard isAllowed(url, configuredWebhookURL: configuredWebhookURL) else {
             throw TomNetworkAllowlistError.urlNotAllowed
         }
+    }
+
+    static func isGitHubReleaseHost(_ host: String) -> Bool {
+        let normalizedHost = host.lowercased()
+        return normalizedHost == githubReleaseAPIHost
+            || normalizedHost == githubDownloadHost
+            || githubReleaseAssetHosts.contains(normalizedHost)
+    }
+
+    /// The releases list and asset API for this repo. Not `/releases/latest`, which skips prereleases.
+    static func isTomLensGitHubReleaseURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil else { return false }
+        guard url.host?.lowercased() == githubReleaseAPIHost else { return false }
+        return url.path == gitHubReleaseRepositoryPath || url.path.hasPrefix(gitHubReleaseRepositoryPath + "/")
+    }
+
+    /// The public zip link GitHub puts on a release. No account is required.
+    static func isTomLensGitHubAssetDownloadURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil else { return false }
+        guard url.host?.lowercased() == githubDownloadHost else { return false }
+        return url.path.hasPrefix(gitHubReleaseDownloadPath)
+    }
+
+    /// A release API URL, the public download link, or the host GitHub redirects that download to.
+    static func isTomLensGitHubDownloadURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", url.user == nil, url.password == nil else { return false }
+        guard let host = url.host?.lowercased() else { return false }
+        if host == githubReleaseAPIHost { return isTomLensGitHubReleaseURL(url) }
+        if host == githubDownloadHost { return isTomLensGitHubAssetDownloadURL(url) }
+        return githubReleaseAssetHosts.contains(host)
     }
 
     /// https URL with a host and no userinfo. Empty or http is not a webhook.
