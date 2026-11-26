@@ -25,48 +25,49 @@ nonisolated struct TomCursorPose: Equatable {
 }
 
 nonisolated enum TomFaceGeometry {
-    /// Flat green from the mascot reference, #5AC078.
-    static let greenRed = 90.0 / 255.0
-    static let greenGreen = 192.0 / 255.0
-    static let greenBlue = 120.0 / 255.0
-    /// Glowing LED cores, near white with a green cast.
-    static let eyeRed = 244.0 / 255.0
-    static let eyeGreen = 255.0 / 255.0
-    static let eyeBlue = 232.0 / 255.0
-    /// Soft glow around each LED.
-    static let glowRed = 198.0 / 255.0
-    static let glowGreen = 255.0 / 255.0
-    static let glowBlue = 140.0 / 255.0
-    /// Darker green for the side panels and the equator seam.
-    static let earRed = 36.0 / 255.0
-    static let earGreen = 122.0 / 255.0
-    static let earBlue = 68.0 / 255.0
-    static let seamRed = 24.0 / 255.0
-    static let seamGreen = 92.0 / 255.0
-    static let seamBlue = 52.0 / 255.0
+    /// Matte lime ball, #7BC62D, with a softer #8FD13A highlight.
+    static let greenRed = 123.0 / 255.0
+    static let greenGreen = 198.0 / 255.0
+    static let greenBlue = 45.0 / 255.0
+    static let highlightRed = 143.0 / 255.0
+    static let highlightGreen = 209.0 / 255.0
+    static let highlightBlue = 58.0 / 255.0
+    /// Red LED ovals, #C8102E.
+    static let eyeRed = 200.0 / 255.0
+    static let eyeGreen = 16.0 / 255.0
+    static let eyeBlue = 46.0 / 255.0
+    /// Darker green for the closed panel lines and the seam.
+    static let earRed = 46.0 / 255.0
+    static let earGreen = 110.0 / 255.0
+    static let earBlue = 24.0 / 255.0
+    /// Open-panel interior, a darker magenta.
+    static let earInteriorRed = 138.0 / 255.0
+    static let earInteriorGreen = 28.0 / 255.0
+    static let earInteriorBlue = 58.0 / 255.0
+    static let seamRed = 28.0 / 255.0
+    static let seamGreen = 48.0 / 255.0
+    static let seamBlue = 18.0 / 255.0
     /// Dark rounded-square tile, #1C1C1E.
     static let tileRed = 28.0 / 255.0
     static let tileGreen = 28.0 / 255.0
     static let tileBlue = 30.0 / 255.0
 
-    /// Fractions of the ball diameter. Negative Y is up (SwiftUI and the
-    /// icon renderer both treat a negative value as the upper half).
-    /// The eyes are horizontal LED slits. Spacing is the gap between them.
-    static let eyeCenterYFraction = -0.17
-    static let eyeSpacingFraction = 0.08
-    static let eyeWidthFraction = 0.20
-    static let eyeHeightFraction = 0.11
-    static let mouthWidthFraction = 0.22
-    static let mouthHeightFraction = 0.06
-    static let mouthCenterYFraction = 0.16
-    static let seamThicknessFraction = 0.05
-    static let earWidthFraction = 0.15
-    static let earHeightFraction = 0.34
-    /// Tucked in at rest. Listening and speaking swing them out.
+    /// Fractions of the ball diameter. Positive Y is down.
+    /// Two small vertical ovals sit just above a lower-middle seam.
+    /// Spacing is the gap between the ovals.
+    static let eyeCenterYFraction = -0.02
+    static let eyeSpacingFraction = 0.02
+    static let eyeWidthFraction = 0.055
+    static let eyeHeightFraction = 0.105
+    /// Wide shallow curve: the middle sits lower than the ends.
+    static let seamCenterYFraction = 0.12
+    static let seamHalfSpanFraction = 0.34
+    static let seamLiftFraction = 0.055
+    static let seamThicknessFraction = 0.018
+    /// Closed at rest. Listening holds them open; speaking flaps them.
     static let earRestDegrees = 0.0
-    static let earActiveDegrees = 34.0
-    /// App icon shows the panels a little open so the mark reads at 32 px.
-    static let iconEarDegrees = 22.0
+    static let earOpenDegrees = 68.0
+    static let iconEarDegrees = 0.0
 }
 
 nonisolated enum TomCursorMotion {
@@ -124,7 +125,7 @@ nonisolated enum TomCursorMotion {
             eyeScaleY = 1.28
             showsPulse = !reduceMotion
             pulseScale = reduceMotion ? 1 : 1.12 + 0.10 * sin(time * 3.2)
-            earFlapDegrees = flappingEarDegrees(time: time, reduceMotion: reduceMotion)
+            earFlapDegrees = TomFaceGeometry.earOpenDegrees
         case .thinking:
             eyeOffsetX = 0.62
             eyeOffsetY = -0.72
@@ -134,7 +135,7 @@ nonisolated enum TomCursorMotion {
             if !reduceMotion {
                 hopOffsetY += -abs(sin(time * 7.2)) * 3.6
             }
-            earFlapDegrees = flappingEarDegrees(time: time, reduceMotion: reduceMotion)
+            earFlapDegrees = speakingEarDegrees(time: time, reduceMotion: reduceMotion)
         case .off, .idle:
             break
         }
@@ -163,13 +164,13 @@ nonisolated enum TomCursorMotion {
         )
     }
 
-    /// Side panels stay open, without oscillating, when Reduce Motion is on.
-    static func flappingEarDegrees(time: TimeInterval, reduceMotion: Bool) -> Double {
+    /// Speaking swings the open panels. Reduce Motion holds them open.
+    static func speakingEarDegrees(time: TimeInterval, reduceMotion: Bool) -> Double {
         if reduceMotion {
-            return TomFaceGeometry.earRestDegrees + TomFaceGeometry.earActiveDegrees
+            return TomFaceGeometry.earOpenDegrees
         }
         let wave = abs(sin(time * 8))
-        return TomFaceGeometry.earRestDegrees + TomFaceGeometry.earActiveDegrees * (0.35 + 0.65 * wave)
+        return TomFaceGeometry.earOpenDegrees * (0.42 + 0.58 * wave)
     }
 
     static func isBlinking(time: TimeInterval, reduceMotion: Bool) -> Bool {

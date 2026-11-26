@@ -18,18 +18,14 @@ struct MotionShot {
 func motionShots() -> [MotionShot] {
     var shots: [MotionShot] = []
     for index in 0..<6 {
-        shots.append(MotionShot(velocityX: 0, activity: .idle, time: 0.40 + Double(index) * 0.05))
+        shots.append(MotionShot(velocityX: 0, activity: .idle, time: 0.40 + Double(index) * 0.04))
     }
-    shots.append(MotionShot(velocityX: 0, activity: .idle, time: 0.03))
-    shots.append(MotionShot(velocityX: 0, activity: .idle, time: 0.08))
+    shots.append(MotionShot(velocityX: 0, activity: .idle, time: 0.04))
     for index in 0..<8 {
-        shots.append(MotionShot(velocityX: 520, activity: .idle, time: 0.12 + Double(index) * 0.07))
-    }
-    for index in 0..<8 {
-        shots.append(MotionShot(velocityX: 0, activity: .listening, time: 0.05 + Double(index) * 0.08))
+        shots.append(MotionShot(velocityX: 0, activity: .listening, time: 0.20 + Double(index) * 0.08))
     }
     for index in 0..<8 {
-        shots.append(MotionShot(velocityX: 0, activity: .speaking, time: 0.08 + Double(index) * 0.08))
+        shots.append(MotionShot(velocityX: 520, activity: .speaking, time: 0.10 + Double(index) * 0.08))
     }
     return shots
 }

@@ -2,8 +2,8 @@
 // Renders the TomLens app icon into leanring-buddy/Assets.xcassets/AppIcon.appiconset.
 // Run from the repo root: swift scripts/render-icon.swift
 //
-// Original glossy green ball: equator seam, LED slits on the upper half,
-// a mouth slit, and side panels. Same fractions as TomFaceGeometry.
+// Matte lime ball, shallow upturned seam, red oval eyes, and thin side
+// panels. Same fractions as TomFaceGeometry.
 // This file is the generator. Do not hand-edit the PNGs.
 
 import Foundation
@@ -43,31 +43,29 @@ struct TomIconPose {
     var verticalPoints = 0.0
     var pulseScale = 1.0
     var showsPulse = false
-    var earFlapDegrees = 22.0
+    var earFlapDegrees = 0.0
 
-    static let appIcon = TomIconPose(earFlapDegrees: 22)
+    static let appIcon = TomIconPose(earFlapDegrees: 0)
 }
 
 enum TomIconPixels {
     // Keep these aligned with TomFaceGeometry.
-    static let green = TomIconColor.rgb(90.0 / 255.0, 192.0 / 255.0, 120.0 / 255.0)
-    static let highlight = TomIconColor.rgb(0.78, 0.96, 0.84)
-    static let shade = TomIconColor.rgb(0.13, 0.40, 0.24)
-    static let led = TomIconColor.rgb(244.0 / 255.0, 1, 232.0 / 255.0)
-    static let glow = TomIconColor.rgb(198.0 / 255.0, 1, 140.0 / 255.0)
-    static let ear = TomIconColor.rgb(36.0 / 255.0, 122.0 / 255.0, 68.0 / 255.0)
-    static let seam = TomIconColor.rgb(24.0 / 255.0, 92.0 / 255.0, 52.0 / 255.0)
+    static let green = TomIconColor.rgb(123.0 / 255.0, 198.0 / 255.0, 45.0 / 255.0)
+    static let highlight = TomIconColor.rgb(143.0 / 255.0, 209.0 / 255.0, 58.0 / 255.0)
+    static let shade = TomIconColor.rgb(98.0 / 255.0, 158.0 / 255.0, 32.0 / 255.0)
+    static let led = TomIconColor.rgb(200.0 / 255.0, 16.0 / 255.0, 46.0 / 255.0)
+    static let earLine = TomIconColor.rgb(46.0 / 255.0, 110.0 / 255.0, 24.0 / 255.0)
+    static let earInterior = TomIconColor.rgb(138.0 / 255.0, 28.0 / 255.0, 58.0 / 255.0)
+    static let seam = TomIconColor.rgb(28.0 / 255.0, 48.0 / 255.0, 18.0 / 255.0)
     static let tile = TomIconColor.rgb(28.0 / 255.0, 28.0 / 255.0, 30.0 / 255.0)
-    static let eyeCenterYFraction = -0.17
-    static let eyeSpacingFraction = 0.08
-    static let eyeWidthFraction = 0.20
-    static let eyeHeightFraction = 0.11
-    static let mouthWidthFraction = 0.22
-    static let mouthHeightFraction = 0.06
-    static let mouthCenterYFraction = 0.16
-    static let seamThicknessFraction = 0.05
-    static let earWidthFraction = 0.15
-    static let earHeightFraction = 0.34
+    static let eyeCenterYFraction = -0.02
+    static let eyeSpacingFraction = 0.02
+    static let eyeWidthFraction = 0.055
+    static let eyeHeightFraction = 0.105
+    static let seamCenterYFraction = 0.12
+    static let seamHalfSpanFraction = 0.34
+    static let seamLiftFraction = 0.055
+    static let seamThicknessFraction = 0.018
     static let sizes = [16, 32, 64, 128, 256, 512, 1024]
 
     static func render(size: Int, pose: TomIconPose = .appIcon, background: TomIconColor? = nil) -> [UInt8] {
@@ -130,7 +128,7 @@ enum TomIconPixels {
             }
         }
 
-        let faceDiameter = background == nil ? 0.56 : 0.62
+        let faceDiameter = background == nil ? 0.70 : 0.62
         let centerX = 0.50
         let centerY = 0.50 + (pose.verticalPoints / 30.0) * faceDiameter
         let dx = n - centerX
@@ -151,23 +149,22 @@ enum TomIconPixels {
             }
         }
 
-        if insideEar(sx, sy, side: -1, degrees: pose.earFlapDegrees) || insideEar(sx, sy, side: 1, degrees: pose.earFlapDegrees) {
-            color = ear
+        for side in [-1.0, 1.0] {
+            if pose.earFlapDegrees >= 8, let panel = openEar(sx, sy, side: side, degrees: pose.earFlapDegrees) {
+                color = panel ? earInterior : earLine
+            }
         }
 
         let distance = hypot(sx, sy)
         if distance <= 0.50 {
             color = ballColor(sx: sx, sy: sy)
-            if abs(sy) <= seamThicknessFraction / 2 && distance < 0.47 {
-                color = seam
+            if pose.earFlapDegrees < 8 {
+                for side in [-1.0, 1.0] where insideClosedEar(sx, sy, side: side) {
+                    color = earLine
+                }
             }
-            if insidePill(
-                sx, sy,
-                cx: 0,
-                cy: mouthCenterYFraction,
-                w: mouthWidthFraction,
-                h: mouthHeightFraction
-            ) {
+            let thickness = max(seamThicknessFraction, 2.4 / Double(big) / faceDiameter)
+            if onSeam(sx, sy, thickness: thickness) {
                 color = seam
             }
             color = paintEye(sx, sy, pose: pose, on: color)
@@ -176,54 +173,67 @@ enum TomIconPixels {
     }
 
     static func ballColor(sx: Double, sy: Double) -> TomIconColor {
-        let light = max(0, 1 - hypot(sx + 0.15, sy + 0.17) / 0.52)
-        let lower = max(0, sy / 0.50)
-        var color = green.mixed(toward: highlight, light * 0.82)
-        color = color.mixed(toward: shade, lower * 0.5)
-        let specular = hypot((sx + 0.13) / 0.10, (sy + 0.16) / 0.065)
-        if specular < 1 {
-            color = color.mixed(toward: TomIconColor.rgb(1, 1, 1), (1 - specular) * 0.7)
-        }
+        let light = max(0, 1 - hypot(sx + 0.12, sy + 0.16) / 0.62)
+        let lower = max(0, (sy + 0.05) / 0.55)
+        var color = green.mixed(toward: highlight, light * 0.72)
+        color = color.mixed(toward: shade, min(0.22, lower * 0.22))
         return color
+    }
+
+    static func onSeam(_ sx: Double, _ sy: Double, thickness: Double) -> Bool {
+        let span = seamHalfSpanFraction
+        if abs(sx) > span { return false }
+        let t = abs(sx) / span
+        let curveY = seamCenterYFraction - seamLiftFraction * t * t
+        return abs(sy - curveY) <= thickness / 2
     }
 
     static func paintEye(_ sx: Double, _ sy: Double, pose: TomIconPose, on color: TomIconColor) -> TomIconColor {
         let halfSpan = (eyeWidthFraction + eyeSpacingFraction) / 2
         var painted = color
         for side in [-1.0, 1.0] {
-            let cx = side * halfSpan + pose.eyeOffsetX * 0.08
-            let cy = eyeCenterYFraction + pose.eyeOffsetY * 0.08
+            let cx = side * halfSpan + pose.eyeOffsetX * 0.06
+            let cy = eyeCenterYFraction + pose.eyeOffsetY * 0.06
             let coreW = eyeWidthFraction * pose.eyeScaleX
-            let coreH = eyeHeightFraction * pose.eyeScaleY
-            if insidePill(sx, sy, cx: cx, cy: cy, w: coreW * 1.18, h: max(coreH * 1.65, 0.02)) {
-                painted = glow
-            }
-            if insidePill(sx, sy, cx: cx, cy: cy, w: coreW, h: max(coreH, 0.012)) {
+            let coreH = max(eyeHeightFraction * pose.eyeScaleY, 0.012)
+            if insideEllipse(sx, sy, cx: cx, cy: cy, w: coreW, h: coreH) {
                 painted = led
             }
         }
         return painted
     }
 
-    static func insideEar(_ sx: Double, _ sy: Double, side: Double, degrees: Double) -> Bool {
-        let pivotX = side * 0.50
-        let dx = sx - pivotX
-        let dy = sy
-        let radians = side * degrees * .pi / 180
-        let cosine = cos(-radians)
-        let sine = sin(-radians)
-        let localX = dx * cosine - dy * sine
-        let localY = dx * sine + dy * cosine
-        let outward = side * localX
-        if outward < -0.03 || outward > earWidthFraction { return false }
-        if abs(localY) > earHeightFraction / 2 { return false }
-        let cap = earHeightFraction / 2
-        let capStart = earWidthFraction - cap
-        if outward > capStart {
-            let ox = outward - capStart
-            if ox * ox + localY * localY > cap * cap { return false }
-        }
-        return true
+    static func insideClosedEar(_ sx: Double, _ sy: Double, side: Double) -> Bool {
+        let radius = hypot(sx, sy)
+        if radius < 0.455 || radius > 0.482 { return false }
+        if sy > -0.16 { return false }
+        let outward = side * sx
+        return outward > 0.16 && outward < 0.34
+    }
+
+    /// Returns true for the magenta interior, false for the green rim.
+    static func openEar(_ sx: Double, _ sy: Double, side: Double, degrees: Double) -> Bool? {
+        let hingeX = side * 0.18
+        let hingeY = -0.38
+        let radians = degrees * .pi / 180
+        let dirX = side * sin(radians)
+        let dirY = -cos(radians)
+        let dx = sx - hingeX
+        let dy = sy - hingeY
+        let along = dx * dirX + dy * dirY
+        let across = dx * (-dirY) + dy * dirX
+        let length = 0.58
+        let halfWidth = 0.085
+        if along < 0 || along > length || abs(across) > halfWidth { return nil }
+        let tip = along - (length - halfWidth)
+        if tip > 0 && tip * tip + across * across > halfWidth * halfWidth { return nil }
+        return abs(across) < halfWidth * 0.62
+    }
+
+    static func insideEllipse(_ x: Double, _ y: Double, cx: Double, cy: Double, w: Double, h: Double) -> Bool {
+        let nx = (x - cx) / (w / 2)
+        let ny = (y - cy) / (h / 2)
+        return nx * nx + ny * ny <= 1
     }
 
     static func insideRoundedSquare(_ x: Double, _ y: Double, radius: Double) -> Bool {
@@ -255,16 +265,17 @@ enum TomIconPixels {
         let distance = hypot(sx, sy)
         let strokeHalf = (1.4 / 2) / (18.0 * 0.86)
         let eye = menuBarEye(sx, sy)
+        let seam = menuBarSeam(sx, sy)
         if isOn {
             if distance <= 0.50 {
-                return eye ? clear : black
+                return (eye || seam) ? clear : black
             }
             return clear
         }
         let slashInset = 2.0 / 18.0
         let slashHalf = (1.4 / 2) / 18.0
         let slash = abs((n - slashInset) - (m - slashInset)) < slashHalf && n > slashInset && n < 1 - slashInset
-        if eye && distance < 0.52 {
+        if (eye || seam) && distance < 0.52 {
             return black
         }
         if abs(distance - 0.50) < strokeHalf {
@@ -277,13 +288,23 @@ enum TomIconPixels {
     }
 
     static func menuBarEye(_ sx: Double, _ sy: Double) -> Bool {
-        let halfSpan = (eyeWidthFraction + eyeSpacingFraction) / 2
+        let width = 0.11
+        let height = 0.16
+        let gap = 0.03
+        let halfSpan = (width + gap) / 2
         for side in [-1.0, 1.0] {
-            if insidePill(sx, sy, cx: side * halfSpan, cy: eyeCenterYFraction, w: eyeWidthFraction, h: eyeHeightFraction) {
+            if insideEllipse(sx, sy, cx: side * halfSpan, cy: 0.02, w: width, h: height) {
                 return true
             }
         }
         return false
+    }
+
+    static func menuBarSeam(_ sx: Double, _ sy: Double) -> Bool {
+        if abs(sx) > 0.30 { return false }
+        let t = abs(sx) / 0.30
+        let curveY = 0.12 - 0.06 * t * t
+        return abs(sy - curveY) <= 0.022
     }
 }
 

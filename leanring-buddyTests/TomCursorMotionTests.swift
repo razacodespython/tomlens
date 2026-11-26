@@ -60,7 +60,7 @@ struct TomCursorMotionTests {
         #expect(pose.hopOffsetY == 0)
         #expect(!pose.showsPulse)
         #expect(pose.eyeScaleY > 1)
-        #expect(pose.earFlapDegrees == TomFaceGeometry.earRestDegrees + TomFaceGeometry.earActiveDegrees)
+        #expect(pose.earFlapDegrees == TomFaceGeometry.earOpenDegrees)
     }
 
     @Test func listeningWidensTheEyesAndShowsAPulse() {
@@ -144,7 +144,7 @@ struct TomCursorMotionTests {
         #expect(still.hopOffsetY == 0)
         #expect(still.earFlapDegrees == 0)
 
-        let early = TomCursorMotion.pose(
+        let listeningEarly = TomCursorMotion.pose(
             velocityX: 0,
             velocityY: 0,
             activity: .listening,
@@ -152,7 +152,7 @@ struct TomCursorMotionTests {
             reduceMotion: false,
             time: 0.05
         )
-        let later = TomCursorMotion.pose(
+        let listeningLater = TomCursorMotion.pose(
             velocityX: 0,
             velocityY: 0,
             activity: .listening,
@@ -160,12 +160,16 @@ struct TomCursorMotionTests {
             reduceMotion: false,
             time: 0.25
         )
-        let reducedA = TomCursorMotion.flappingEarDegrees(time: 0.05, reduceMotion: true)
-        let reducedB = TomCursorMotion.flappingEarDegrees(time: 0.9, reduceMotion: true)
-        #expect(early.earFlapDegrees != later.earFlapDegrees)
-        #expect(early.showsPulse)
+        let speakingEarly = TomCursorMotion.speakingEarDegrees(time: 0.05, reduceMotion: false)
+        let speakingLater = TomCursorMotion.speakingEarDegrees(time: 0.25, reduceMotion: false)
+        let reducedA = TomCursorMotion.speakingEarDegrees(time: 0.05, reduceMotion: true)
+        let reducedB = TomCursorMotion.speakingEarDegrees(time: 0.9, reduceMotion: true)
+        #expect(listeningEarly.earFlapDegrees == TomFaceGeometry.earOpenDegrees)
+        #expect(listeningEarly.earFlapDegrees == listeningLater.earFlapDegrees)
+        #expect(listeningEarly.showsPulse)
+        #expect(speakingEarly != speakingLater)
         #expect(reducedA == reducedB)
-        #expect(TomFaceGeometry.eyeCenterYFraction < 0)
-        #expect(TomFaceGeometry.eyeWidthFraction > TomFaceGeometry.eyeHeightFraction)
+        #expect(TomFaceGeometry.eyeHeightFraction > TomFaceGeometry.eyeWidthFraction)
+        #expect(TomFaceGeometry.seamCenterYFraction > TomFaceGeometry.eyeCenterYFraction)
     }
 }
