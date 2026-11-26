@@ -181,36 +181,57 @@ struct TomLensStatusView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Permissions")
                 .font(.headline)
-            permissionRow(
-                name: "Screen Recording",
-                isGranted: companionManager.hasScreenRecordingPermission,
-                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-            )
-            permissionRow(
-                name: "Microphone",
-                isGranted: companionManager.hasMicrophonePermission,
-                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-            )
-            permissionRow(
-                name: "Speech Recognition",
-                isGranted: companionManager.hasSpeechRecognitionPermission,
-                settingsURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
-            )
+            permissionRow(name: "Screen Recording", status: companionManager.screenRecordingStatus) {
+                companionManager.allowScreenRecording()
+            } openSettings: {
+                companionManager.openPermissionSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            }
+            permissionRow(name: "Microphone", status: companionManager.microphoneStatus) {
+                companionManager.allowMicrophone()
+            } openSettings: {
+                companionManager.openPermissionSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+            }
+            permissionRow(name: "Speech Recognition", status: companionManager.speechRecognitionStatus) {
+                companionManager.allowSpeechRecognition()
+            } openSettings: {
+                companionManager.openPermissionSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
+            }
+            Text(TomLensStatusPresentation.permissionRevokedAfterUpdateNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Reset") {
+                companionManager.openPermissionSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            }
+            .pointerCursor()
         }
     }
 
-    private func permissionRow(name: String, isGranted: Bool, settingsURL: String) -> some View {
+    private func permissionRow(
+        name: String,
+        status: TomLensPermissionStatus,
+        allow: @escaping () -> Void,
+        openSettings: @escaping () -> Void
+    ) -> some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(isGranted ? Color.green : Color.red)
+                .fill(status == .granted ? Color.green : Color.red)
                 .frame(width: 8, height: 8)
             Text(name)
             Spacer()
-            Button("Open Settings") {
-                guard let url = URL(string: settingsURL) else { return }
-                NSWorkspace.shared.open(url)
+            if let title = TomLensPermissionPresentation.buttonTitle(for: status) {
+                Button(title) {
+                    switch TomLensPermissionPresentation.action(for: status) {
+                    case .allow:
+                        allow()
+                    case .openSettings:
+                        openSettings()
+                    case .none:
+                        break
+                    }
+                }
+                .pointerCursor()
             }
-            .pointerCursor()
         }
     }
 

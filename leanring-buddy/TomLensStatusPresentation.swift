@@ -49,8 +49,10 @@ nonisolated enum TomLensActivity: Equatable {
 
 nonisolated enum TomLensStatusPresentation {
     static let testLookPrompt = "What do you see?"
-    static let switchedOffHint = "Switch on, then hold Control+Option+Space"
-    static let readyHotkeyStatus = "Hold Control+Option+Space"
+    static let hotkeyName = "Control+Option+Z"
+    static let switchedOffHint = "Switch on, then hold Control+Option+Z"
+    static let readyHotkeyStatus = "Hold Control+Option+Z"
+    static let permissionRevokedAfterUpdateNote = "If a permission shows revoked after an update, toggle TomLens off and on in System Settings, or click Reset."
     static let noWindowPickedLabel = "No window picked"
 
     static func watchingLabel(applicationName: String?, windowTitle: String?) -> String {
@@ -77,5 +79,49 @@ nonisolated enum TomLensStatusPresentation {
             return "Signed in as \(email)"
         }
         return "Not signed in"
+    }
+}
+
+/// What the Mac has decided about one privacy permission.
+nonisolated enum TomLensPermissionStatus: Equatable {
+    case notDetermined
+    case granted
+    case denied
+}
+
+/// What the status-window button should do for that decision.
+nonisolated enum TomLensPermissionAction: Equatable {
+    case allow
+    case openSettings
+    case none
+}
+
+nonisolated enum TomLensPermissionPresentation {
+    static func action(for status: TomLensPermissionStatus) -> TomLensPermissionAction {
+        switch status {
+        case .notDetermined: return .allow
+        case .granted: return .none
+        case .denied: return .openSettings
+        }
+    }
+
+    static func buttonTitle(for status: TomLensPermissionStatus) -> String? {
+        switch action(for: status) {
+        case .allow: return "Allow"
+        case .openSettings: return "Open Settings"
+        case .none: return nil
+        }
+    }
+
+    /// Screen Recording has no notDetermined API. The first failed preflight
+    /// this launch is still the system prompt; after that, open Settings.
+    static func screenRecordingStatus(preflightGranted: Bool, hasAttemptedSystemPrompt: Bool) -> TomLensPermissionStatus {
+        if preflightGranted { return .granted }
+        return hasAttemptedSystemPrompt ? .denied : .notDetermined
+    }
+
+    static func authorizationStatus(isAuthorized: Bool, isNotDetermined: Bool) -> TomLensPermissionStatus {
+        if isAuthorized { return .granted }
+        return isNotDetermined ? .notDetermined : .denied
     }
 }

@@ -21,7 +21,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
     @Published private(set) var isShortcutCurrentlyPressed = false
 
     /// Set when Carbon refuses the hot key, usually because another app
-    /// already owns Control+Option+Space. Nil when the hot key is registered
+    /// already owns Control+Option+Z. Nil when the hot key is registered
     /// or TomLens is switched off. The menu-bar panel shows this text.
     @Published private(set) var registrationFailureMessage: String?
 
@@ -66,7 +66,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             &installedEventHandlerReference
         )
         guard installStatus == noErr else {
-            let failureMessage = "TomLens couldn't install the Control+Option+Space hotkey (status \(installStatus))."
+            let failureMessage = "TomLens couldn't install the Control+Option+Z hotkey (status \(installStatus))."
             registrationFailureMessage = failureMessage
             print("⚠️ Push-to-talk: \(failureMessage)")
             return
@@ -82,7 +82,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             &registeredHotKeyReference
         )
         guard registerStatus == noErr else {
-            let failureMessage = "Control+Option+Space is already used by another app, so the hotkey didn't register (status \(registerStatus))."
+            let failureMessage = "Control+Option+Z is already used by another app, so the hotkey didn't register (status \(registerStatus))."
             registrationFailureMessage = failureMessage
             print("⚠️ Push-to-talk: RegisterEventHotKey failed for \(BuddyPushToTalkShortcut.pushToTalkDisplayText). \(failureMessage)")
             registeredHotKeyReference = nil

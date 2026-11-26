@@ -78,13 +78,14 @@ if rg -q 'RegisterEventHotKey' leanring-buddy/GlobalPushToTalkShortcutMonitor.sw
 else
   echo "FAIL  push-to-talk must use Carbon RegisterEventHotKey"; failures=$((failures + 1))
 fi
-if rg -q 'carbonVirtualKeyCode: UInt32 = 0x31' leanring-buddy/BuddyPushToTalkShortcut.swift \
-   && rg -q 'pushToTalkDisplayText = "ctrl \+ option \+ space"' leanring-buddy/BuddyPushToTalkShortcut.swift \
-   && rg -q 'Switch on, then hold Control\+Option\+Space' leanring-buddy/TomLensStatusPresentation.swift; then
-  echo "ok    push-to-talk is control + option + space, and off state says so"
+if rg -q 'carbonVirtualKeyCode: UInt32 = 0x06' leanring-buddy/BuddyPushToTalkShortcut.swift \
+   && rg -q 'pushToTalkDisplayText = "ctrl \+ option \+ Z"' leanring-buddy/BuddyPushToTalkShortcut.swift \
+   && rg -q 'Switch on, then hold Control\+Option\+Z' leanring-buddy/TomLensStatusPresentation.swift; then
+  echo "ok    push-to-talk is control + option + Z, and off state says so"
 else
-  echo "FAIL  push-to-talk must be kVK_Space (0x31) and the off hint must say to switch on first"; failures=$((failures + 1))
+  echo "FAIL  push-to-talk must be kVK_ANSI_Z (0x06) and the off hint must say to switch on first"; failures=$((failures + 1))
 fi
+forbid "no leftover Control+Option+Space hotkey" 'kVK_Space|Control\+Option\+Space|option \+ space' leanring-buddy leanring-buddyTests INSTALL.md AGENTS.md README.md
 forbid "no leftover Control+Option+T hotkey" 'option \+ T|kVK_ANSI_T|Ctrl\+Option\+T|Control \+ Option \+ T' leanring-buddy leanring-buddyTests INSTALL.md AGENTS.md
 if rg -q 'isTomLensSwitchedOn: Bool = false' leanring-buddy/CompanionManager.swift; then
   echo "ok    TomLens still launches switched off"

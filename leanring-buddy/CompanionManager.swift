@@ -33,8 +33,11 @@ final class CompanionManager: ObservableObject {
     @Published private(set) var hasScreenRecordingPermission = false
     @Published private(set) var hasMicrophonePermission = false
     @Published private(set) var hasSpeechRecognitionPermission = false
+    @Published private(set) var screenRecordingStatus = TomLensPermissionStatus.notDetermined
+    @Published private(set) var microphoneStatus = TomLensPermissionStatus.notDetermined
+    @Published private(set) var speechRecognitionStatus = TomLensPermissionStatus.notDetermined
     @Published private(set) var hasScreenContentPermission = false
-    /// Shown when Carbon refuses Control+Option+Space, usually because another app owns it.
+    /// Shown when Carbon refuses Control+Option+Z, usually because another app owns it.
     @Published private(set) var pushToTalkRegistrationFailureMessage: String?
 
     /// Screen location (global AppKit coords) of a detected UI element the
@@ -283,11 +286,25 @@ final class CompanionManager: ObservableObject {
         let previouslyHadScreenRecording = hasScreenRecordingPermission
         let previouslyHadMicrophone = hasMicrophonePermission
 
-        hasScreenRecordingPermission = WindowPositionManager.hasScreenRecordingPermission()
+        let screenRecordingGranted = WindowPositionManager.hasScreenRecordingPermission()
+        hasScreenRecordingPermission = screenRecordingGranted
+        screenRecordingStatus = TomLensPermissionPresentation.screenRecordingStatus(
+            preflightGranted: screenRecordingGranted,
+            hasAttemptedSystemPrompt: WindowPositionManager.hasAttemptedScreenRecordingSystemPrompt
+        )
 
         let micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         hasMicrophonePermission = micAuthStatus == .authorized
-        hasSpeechRecognitionPermission = SFSpeechRecognizer.authorizationStatus() == .authorized
+        microphoneStatus = TomLensPermissionPresentation.authorizationStatus(
+            isAuthorized: micAuthStatus == .authorized,
+            isNotDetermined: micAuthStatus == .notDetermined
+        )
+        let speechAuthStatus = SFSpeechRecognizer.authorizationStatus()
+        hasSpeechRecognitionPermission = speechAuthStatus == .authorized
+        speechRecognitionStatus = TomLensPermissionPresentation.authorizationStatus(
+            isAuthorized: speechAuthStatus == .authorized,
+            isNotDetermined: speechAuthStatus == .notDetermined
+        )
 
         // Debug: log permission state on changes
         if previouslyHadScreenRecording != hasScreenRecordingPermission
@@ -300,6 +317,33 @@ final class CompanionManager: ObservableObject {
         if !hasScreenContentPermission {
             hasScreenContentPermission = UserDefaults.standard.bool(forKey: "hasScreenContentPermission")
         }
+    }
+
+    /// Shows the real system prompt. Settings opens only after a denial.
+    func allowScreenRecording() {
+        _ = WindowPositionManager.requestScreenRecordingPermission()
+        refreshAllPermissions()
+    }
+
+    func allowMicrophone() {
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshAllPermissions()
+            }
+        }
+    }
+
+    func allowSpeechRecognition() {
+        SFSpeechRecognizer.requestAuthorization { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshAllPermissions()
+            }
+        }
+    }
+
+    func openPermissionSettings(_ settingsURL: String) {
+        guard let url = URL(string: settingsURL) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Triggers the macOS screen content picker by performing a dummy

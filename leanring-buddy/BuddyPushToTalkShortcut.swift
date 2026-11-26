@@ -21,17 +21,18 @@ nonisolated enum BuddyPushToTalkShortcut {
         case released
     }
 
-    /// Control + Option + Space. Carbon hot keys need a real key:
+    /// Control + Option + Z. Carbon hot keys need a real key:
     /// modifier-only shortcuts need a CGEvent tap and Input Monitoring,
-    /// which TomLens forbids. Raw values mirror Carbon's kVK_Space (0x31)
+    /// which TomLens forbids. Raw values mirror Carbon's kVK_ANSI_Z (0x06)
     /// and controlKey | optionKey (checked against the Carbon constants
-    /// in the macOS unit tests).
-    static let carbonVirtualKeyCode: UInt32 = 0x31
+    /// in the macOS unit tests). The space combo is avoided because
+    /// skhd and macOS input-source switching already own it.
+    static let carbonVirtualKeyCode: UInt32 = 0x06
     static let carbonModifierFlags: UInt32 = 0x1000 | 0x0800
 
-    static let pushToTalkDisplayText = "ctrl + option + space"
-    static let pushToTalkSpokenText = "control + option + space"
-    static let keyCapsuleLabels = ["ctrl", "option", "space"]
+    static let pushToTalkDisplayText = "ctrl + option + Z"
+    static let pushToTalkSpokenText = "control + option + Z"
+    static let keyCapsuleLabels = ["ctrl", "option", "Z"]
     static let pushToTalkTooltipText = "push to talk (\(pushToTalkDisplayText))"
 
     /// Converts a hot key press/release into a transition, ignoring repeats

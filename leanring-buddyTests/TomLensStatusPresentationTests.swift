@@ -35,8 +35,9 @@ struct TomLensStatusPresentationTests {
     }
 
     @Test func hotkeyStatusPrefersARegistrationFailure() {
-        #expect(TomLensStatusPresentation.hotkeyStatus(registrationFailureMessage: nil) == "Hold Control+Option+Space")
-        #expect(TomLensStatusPresentation.hotkeyStatus(registrationFailureMessage: "") == "Hold Control+Option+Space")
+        #expect(TomLensStatusPresentation.hotkeyStatus(registrationFailureMessage: nil) == "Hold Control+Option+Z")
+        #expect(TomLensStatusPresentation.hotkeyStatus(registrationFailureMessage: "") == "Hold Control+Option+Z")
+        #expect(TomLensStatusPresentation.switchedOffHint == "Switch on, then hold Control+Option+Z")
         #expect(TomLensStatusPresentation.hotkeyStatus(registrationFailureMessage: "taken") == "taken")
     }
 
@@ -49,6 +50,27 @@ struct TomLensStatusPresentationTests {
         #expect(TomLensStatusPresentation.chatGPTStatusLabel(isSignedIn: false, email: nil) == "Not signed in")
         #expect(TomLensStatusPresentation.chatGPTStatusLabel(isSignedIn: true, email: "") == "Not signed in")
         #expect(TomLensStatusPresentation.chatGPTStatusLabel(isSignedIn: true, email: "raza@example.com") == "Signed in as raza@example.com")
+    }
+
+    @Test func permissionButtonAsksBeforeItOpensSettings() {
+        #expect(TomLensPermissionPresentation.action(for: .notDetermined) == .allow)
+        #expect(TomLensPermissionPresentation.buttonTitle(for: .notDetermined) == "Allow")
+        #expect(TomLensPermissionPresentation.action(for: .denied) == .openSettings)
+        #expect(TomLensPermissionPresentation.buttonTitle(for: .denied) == "Open Settings")
+        #expect(TomLensPermissionPresentation.action(for: .granted) == .none)
+        #expect(TomLensPermissionPresentation.buttonTitle(for: .granted) == nil)
+    }
+
+    @Test func screenRecordingTreatsTheFirstRefusalAsTheSystemPrompt() {
+        #expect(TomLensPermissionPresentation.screenRecordingStatus(preflightGranted: true, hasAttemptedSystemPrompt: false) == .granted)
+        #expect(TomLensPermissionPresentation.screenRecordingStatus(preflightGranted: false, hasAttemptedSystemPrompt: false) == .notDetermined)
+        #expect(TomLensPermissionPresentation.screenRecordingStatus(preflightGranted: false, hasAttemptedSystemPrompt: true) == .denied)
+    }
+
+    @Test func microphoneAndSpeechMapTheSystemAuthorization() {
+        #expect(TomLensPermissionPresentation.authorizationStatus(isAuthorized: true, isNotDetermined: false) == .granted)
+        #expect(TomLensPermissionPresentation.authorizationStatus(isAuthorized: false, isNotDetermined: true) == .notDetermined)
+        #expect(TomLensPermissionPresentation.authorizationStatus(isAuthorized: false, isNotDetermined: false) == .denied)
     }
 
     @Test func testLookPromptIsTheFixedQuestion() {

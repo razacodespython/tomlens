@@ -89,7 +89,7 @@ final class MenuBarPanelManager: NSObject {
         // Dims the icon while the button stays clickable, so off is obvious.
         button.appearsDisabled = !isTomLensSwitchedOn
         button.toolTip = isTomLensSwitchedOn
-            ? "TomLens is on. Hold Control+Option+Space to talk."
+            ? "TomLens is on. Hold Control+Option+Z to talk."
             : "TomLens is off. \(TomLensStatusPresentation.switchedOffHint)"
     }
 

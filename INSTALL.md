@@ -47,7 +47,7 @@ TomLens starts **off**. Off means the hotkey is not listening, and there is no c
 The menu-bar triangle is dimmed with a slash while TomLens is off, and filled while it is on.
 
 1. In the status window (or the menu-bar panel), flip the switch until it says **TomLens is on**.
-2. The window should say **Hold Control+Option+Space**. If another app already uses that shortcut, the window says so instead of pretending it worked.
+2. The window should say **Hold Control+Option+Z**. If another app already uses that shortcut, the window says so instead of pretending it worked.
 
 ## 5. Sign in with ChatGPT
 
@@ -63,7 +63,7 @@ In the TomLens panel, open the **Window** menu and pick the Tradovate window. To
 
 ## 7. Talk
 
-Hold **Control + Option + Space**. Speak while the keys are down. Release them when you are done.
+Hold **Control + Option + Z**. Speak while the keys are down. Release them when you are done.
 
 The status window changes from **Idle** to **Listening** (with a microphone level), then **Thinking**, then **Speaking**. Your last words and Tom's last reply stay on that window.
 
