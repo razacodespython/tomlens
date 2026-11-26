@@ -9,7 +9,7 @@
 
 import Foundation
 
-enum PushToTalkUtterancePolicy {
+nonisolated enum PushToTalkUtterancePolicy {
     /// Hard cap on one hold. SFSpeechRecognizer stops around one minute, and
     /// a missed key-up must never leave the mic open.
     static let maximumHoldDurationSeconds: TimeInterval = 50

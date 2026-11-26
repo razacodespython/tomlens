@@ -9,7 +9,7 @@
 
 import Foundation
 
-enum BuddyPushToTalkShortcut {
+nonisolated enum BuddyPushToTalkShortcut {
     enum ShortcutTransition: Equatable {
         case none
         case pressed

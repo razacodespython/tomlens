@@ -23,6 +23,11 @@ forbid() {
   fi
 }
 
+# require <description> <regex> <file>
+require() {
+  if rg -q -e "$2" "$3" 2>/dev/null; then echo "ok    $1"; else echo "FAIL  $1 ($3)"; failures=$((failures + 1)); fi
+}
+
 echo "== M0: never act on the Mac =="
 forbid "no synthetic input events (CGEventPost / CGEvent init)" 'CGEventPost|\.post\(tap:|CGEvent\(keyboardEventSource|CGEvent\(mouseEventSource|CGEventCreateKeyboardEvent|CGEventCreateMouseEvent'
 forbid "no cursor warping" 'CGWarpMouseCursorPosition|CGAssociateMouseAndMouseCursorPosition'
@@ -108,6 +113,22 @@ if rg -q 'PushToTalkUtterancePolicy\.maximumHoldDurationSeconds' leanring-buddy/
 else
   echo "FAIL  mic hold must be capped by PushToTalkUtterancePolicy.maximumHoldDurationSeconds"; failures=$((failures + 1))
 fi
+
+echo "== M5: Sign in with ChatGPT, plan usage only =="
+require "SIWC first registration uses dynamic_agent_client" '"dynamic_agent_client"' leanring-buddy/ChatGPTSignInProtocol.swift
+require "loopback redirect is 127.0.0.1" 'http://127\.0\.0\.1:' leanring-buddy/ChatGPTSignInProtocol.swift
+require "PKCE S256" '"S256"' leanring-buddy/ChatGPTSignInProtocol.swift
+require "Responses requests are store:false" '"store": false' leanring-buddy/ResponsesAPIProtocol.swift
+require "Responses requests are stream:true" '"stream": true' leanring-buddy/ResponsesAPIProtocol.swift
+require "hard call cap defaults to 40/hour" 'defaultMaximumCallsPerHour = 40$' leanring-buddy/ResponsesAPIProtocol.swift
+require "every AI call passes the call cap" 'callRateLimiter\.reserveCall' leanring-buddy/CompanionBrain.swift
+require "tokens live in the Keychain" 'kSecClassGenericPassword' leanring-buddy/ChatGPTSignInService.swift
+forbid "no localhost redirect (SIWC requires 127.0.0.1)" 'localhost'
+forbid "no ChatGPT backend-api endpoints" 'backend-api'
+forbid "no token, key or auth URL in logs" 'print\(.*(accessToken|refreshToken|idToken|bearerToken|apiKey|APIKey|authorizationURL|codeVerifier)'
+forbid "no hardcoded API keys" 'sk-[A-Za-z0-9_-]{16,}'
+forbid "API-key fallback is never switched on by code" 'set\(true,\s*forKey:\s*(TomLensAPIKeyFallback|"TomLensAPIKeyFallbackEnabled")|register\(defaults:.*TomLensAPIKeyFallbackEnabled'
+forbid "never send unsupported sampling/limit fields" '"(temperature|top_p|max_output_tokens|previous_response_id)":'
 
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))

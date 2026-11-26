@@ -9,7 +9,7 @@
 
 import Foundation
 
-enum TradingWindowCoordinateMapping {
+nonisolated enum TradingWindowCoordinateMapping {
     static func appKitGlobalPoint(
         fromScreenshotPoint screenshotPoint: CGPoint,
         screenshotSizeInPixels: CGSize,

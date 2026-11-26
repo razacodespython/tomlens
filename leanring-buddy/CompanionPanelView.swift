@@ -12,6 +12,7 @@ import SwiftUI
 
 struct CompanionPanelView: View {
     @ObservedObject var companionManager: CompanionManager
+    @ObservedObject private var chatGPTSignInService = ChatGPTSignInService.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,6 +30,9 @@ struct CompanionPanelView: View {
                     .frame(height: 12)
 
                 tradingWindowPickerRow
+                    .padding(.horizontal, 16)
+
+                chatGPTAccountRow
                     .padding(.horizontal, 16)
             }
 
@@ -457,6 +461,66 @@ struct CompanionPanelView: View {
         .padding(.vertical, 4)
         .onAppear {
             companionManager.refreshPickableTradingWindows()
+        }
+    }
+
+    // MARK: - ChatGPT Account
+
+    /// Sign in with ChatGPT (plan usage). Credits overflow stays off: TomLens
+    /// never switches to paid credits; on a usage limit it pauses.
+    private var chatGPTAccountRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("ChatGPT")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Spacer()
+
+                if let signedInEmail = chatGPTSignInService.signedInEmail {
+                    Menu {
+                        ForEach(chatGPTSignInService.availableModels, id: \.slug) { model in
+                            Button(model.displayName) { chatGPTSignInService.selectedModelSlug = model.slug }
+                        }
+                        Divider()
+                        Button("Manage usage…") { chatGPTSignInService.openManageUsagePage() }
+                        Button("Sign out") { chatGPTSignInService.signOut() }
+                    } label: {
+                        Text(signedInEmail)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(DS.Colors.textPrimary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .frame(maxWidth: 190, alignment: .trailing)
+                    .pointerCursor()
+                } else {
+                    Button(chatGPTSignInService.isSigningIn ? "Waiting for browser…" : "Sign in with ChatGPT") {
+                        if chatGPTSignInService.isSigningIn {
+                            chatGPTSignInService.cancelSignIn()
+                        } else {
+                            chatGPTSignInService.signIn()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(DS.Colors.accent)
+                    .pointerCursor()
+                }
+            }
+
+            Text(chatGPTSignInService.lastErrorMessage
+                 ?? "Uses your ChatGPT plan. Keep credits overflow off in ChatGPT settings; TomLens pauses at your limit.")
+                .font(.system(size: 10))
+                .foregroundColor(chatGPTSignInService.lastErrorMessage == nil ? DS.Colors.textTertiary : DS.Colors.warning)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 4)
+        .task {
+            if chatGPTSignInService.isSignedIn && chatGPTSignInService.availableModels.isEmpty {
+                await chatGPTSignInService.refreshModelCatalog()
+            }
         }
     }
 

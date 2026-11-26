@@ -12,7 +12,7 @@ import Foundation
 
 /// A window that ScreenCaptureKit reported as shareable, reduced to the
 /// fields the policy needs.
-struct CapturableWindowCandidate: Equatable, Identifiable {
+nonisolated struct CapturableWindowCandidate: Equatable, Identifiable {
     let windowID: UInt32
     let bundleIdentifier: String?
     let applicationName: String
@@ -30,7 +30,7 @@ struct CapturableWindowCandidate: Equatable, Identifiable {
 
 /// The window the user picked, persisted so TomLens can find it again and
 /// pause if it disappears or turns into something else.
-struct PickedTradingWindowSelection: Codable, Equatable {
+nonisolated struct PickedTradingWindowSelection: Codable, Equatable {
     let windowID: UInt32
     let bundleIdentifier: String?
     let applicationName: String
@@ -49,7 +49,7 @@ struct PickedTradingWindowSelection: Codable, Equatable {
     }
 }
 
-enum WindowCaptureDecision: Equatable {
+nonisolated enum WindowCaptureDecision: Equatable {
     case allowed
     /// Allowed, but the user must see a warning: a browser window can show
     /// other tabs and extensions, not just Tradovate.
@@ -62,7 +62,7 @@ enum WindowCaptureDecision: Equatable {
     }
 }
 
-enum TradingWindowCapturePolicy {
+nonisolated enum TradingWindowCapturePolicy {
 
     // MARK: - Tradovate desktop app
 
@@ -243,7 +243,7 @@ enum TradingWindowCapturePolicy {
 }
 
 /// Persists the picked window in UserDefaults.
-enum PickedTradingWindowStore {
+nonisolated enum PickedTradingWindowStore {
     private static let userDefaultsKey = "pickedTradingWindowSelection"
 
     static func load(from userDefaults: UserDefaults = .standard) -> PickedTradingWindowSelection? {
