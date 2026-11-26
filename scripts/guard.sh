@@ -187,6 +187,43 @@ if command -v git >/dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
   fi
 fi
 
+echo "== M10: Ask Tom relay is outbound and capped =="
+require "network allowlist names ntfy" 'ntfy\.sh' leanring-buddy/TomNetworkAllowlist.swift
+require "responses calls go through the allowlist" 'TomNetworkAllowlist\.validate' leanring-buddy/CompanionBrain.swift
+require "sign-in calls go through the allowlist" 'TomNetworkAllowlist\.validate' leanring-buddy/ChatGPTSignInService.swift
+require "webhook posts go through the allowlist" 'TomNetworkAllowlist\.validate' leanring-buddy/TomWebhookClient.swift
+require "reply stream goes through the allowlist" 'TomNetworkAllowlist\.validate' leanring-buddy/TomReplyListener.swift
+require "ask cap is 6 per session" 'maximumAsksPerSession = 6' leanring-buddy/TomRelayProtocol.swift
+require "asks are at least 3 minutes apart" 'minimumSecondsBetweenAsks: TimeInterval = 180' leanring-buddy/TomRelayProtocol.swift
+require "reply nonce expires in 10 minutes" 'replyNonceLifetimeSeconds: TimeInterval = 600' leanring-buddy/TomRelayProtocol.swift
+require "one automatic session end" 'maximumSessionEndPosts = 1' leanring-buddy/TomRelayProtocol.swift
+require "session payload file name" 'tom-payload.json' leanring-buddy/TomRelayProtocol.swift
+require "observations require screen_read" 'screen_read' leanring-buddy/TomRelayProtocol.swift
+require "observations can be what Raza said" 'raza_said' leanring-buddy/TomRelayProtocol.swift
+require "webhook key account is the Keychain item" 'tom-webhook-sender-key' leanring-buddy/TomRelaySettings.swift
+require "webhook key is saved to the Keychain" 'TomLensKeychainStore\.save' leanring-buddy/TomRelayCoordinator.swift
+require "Tom replies are labeled review" 'Tom \(review\)' leanring-buddy/TomRelaySettings.swift
+require "thinking state is shown" 'Tom is thinking…' leanring-buddy/TomRelaySettings.swift
+require "switch-off ends the relay session" 'finishRelaySession' leanring-buddy/CompanionManager.swift
+require "switch-off stops the reply stream" 'setSwitchedOn\(false\)' leanring-buddy/CompanionManager.swift
+require "hub signature covers the raw body" 'X-Hub-Signature-256' leanring-buddy/TomRelayProtocol.swift
+forbid "ntfy topic is never printed" 'print\(.*[Tt]opic'
+forbid "webhook sender key is never printed" 'print\(.*(senderKey|webhookKey)'
+python3 - <<'PY_HOSTS' || failures=$((failures + 1))
+import re, pathlib, sys
+allowed_hosts = {"api.openai.com", "auth.openai.com", "chatgpt.com", "ntfy.sh", "127.0.0.1"}
+found_hosts = set()
+for path in pathlib.Path("leanring-buddy").rglob("*.swift"):
+    text = path.read_text()
+    for host in re.findall(r"https?://([A-Za-z0-9._-]+)", text):
+        found_hosts.add(host.split(":")[0].lower())
+unexpected = sorted(found_hosts - allowed_hosts)
+if unexpected:
+    print("FAIL  outbound hosts outside the allowlist: " + ", ".join(unexpected))
+    sys.exit(1)
+print(f"ok    hardcoded hosts are on the allowlist ({sorted(found_hosts)})")
+PY_HOSTS
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys

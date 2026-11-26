@@ -86,6 +86,16 @@ final class CompanionManager: ObservableObject {
     private let tutorEventMonitor = TutorEventMonitor()
     /// Local journal (~/TomLens/journal/<session>/), one per switch-on.
     private var sessionJournal: SessionJournal?
+    /// Ask Tom posts and the ntfy reply stream. Never on the ChatGPT turn.
+    let tomRelayCoordinator = TomRelayCoordinator()
+    private var relayFrames: [TomRelayFrame] = []
+    private var relayTranscript: [TomRelayTranscriptLine] = []
+    private var relayModelReplies: [TomRelayModelReply] = []
+    private var relayObservations = TomSessionObservations()
+    private var relaySessionStartedAt: Date?
+    private var relaySessionIdentifier: String?
+    private var relayModelCallCount = 0
+    private var relaySessionClosed = true
     /// When the current push-to-talk hold began, for the accidental-tap check.
     private var pushToTalkPressedAt: Date?
     /// Force-stops the mic if a hold exceeds the maximum (e.g. a missed key-up).
@@ -148,16 +158,20 @@ final class CompanionManager: ObservableObject {
     @Published private(set) var isTomLensSwitchedOn: Bool = false
 
     func setTomLensSwitchedOn(_ switchedOn: Bool) {
+        guard switchedOn != isTomLensSwitchedOn else { return }
         isTomLensSwitchedOn = switchedOn
 
         if switchedOn {
             registerPushToTalkHotKey()
             refreshPickableTradingWindows()
             startTutorEventMonitor()
+            tomRelayCoordinator.setSwitchedOn(true)
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
         } else {
+            finishRelaySession()
+            tomRelayCoordinator.setSwitchedOn(false)
             unregisterPushToTalkHotKey()
             tutorEventMonitor.stop()
             sessionJournal = nil
@@ -184,6 +198,9 @@ final class CompanionManager: ObservableObject {
     }
 
     func start() {
+        tomRelayCoordinator.onAcceptedReview = { [weak self] reviewText, ruleTag in
+            self?.presentTomReview(text: reviewText, ruleTag: ruleTag)
+        }
         refreshAllPermissions()
         print("🔑 TomLens start — screen: \(hasScreenRecordingPermission), mic: \(hasMicrophonePermission), screenContent: \(hasScreenContentPermission), onboarded: \(hasCompletedOnboarding)")
         startPermissionPolling()
@@ -238,22 +255,24 @@ final class CompanionManager: ObservableObject {
 
         // Switch TomLens on and show the overlay for the first time —
         // isFirstAppearance triggers the welcome animation
-        isTomLensSwitchedOn = true
-        registerPushToTalkHotKey()
-        refreshPickableTradingWindows()
-        startTutorEventMonitor()
-        overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-        isOverlayVisible = true
+        if !isTomLensSwitchedOn {
+            setTomLensSwitchedOn(true)
+        }
     }
 
     /// Starts ~1 fps sampling of the picked window and the automatic triggers.
     private func startTutorEventMonitor() {
+        finishRelaySession()
+        let startedAt = Date()
         do {
-            sessionJournal = try SessionJournal()
+            sessionJournal = try SessionJournal(startedAt: startedAt)
         } catch {
             sessionJournal = nil
             print("⚠️ Couldn't create the session journal: \(error.localizedDescription)")
         }
+        let sessionIdentifier = sessionJournal?.sessionDirectory.lastPathComponent
+            ?? SessionJournal.sessionDirectoryName(for: startedAt, timeZone: TomRelayClock.hongKongTimeZone)
+        beginRelaySession(identifier: sessionIdentifier, startedAt: startedAt)
         tutorEventMonitor.onAutomaticTrigger = { [weak self] trigger in
             self?.handleAutomaticTrigger(trigger)
         }
@@ -268,6 +287,9 @@ final class CompanionManager: ObservableObject {
     }
 
     func stop() {
+        if isTomLensSwitchedOn {
+            setTomLensSwitchedOn(false)
+        }
         unregisterPushToTalkHotKey()
         tutorEventMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
@@ -551,8 +573,25 @@ final class CompanionManager: ObservableObject {
     // MARK: - Tutor Turns
 
     /// Push-to-talk: always answered (subject to the hourly cap).
+    /// "Ask Tom …" also posts to Tom without waiting on that post.
     private func sendTranscriptToBrainWithScreenshot(transcript: String) {
+        if let question = TomAskPolicy.question(fromSpokenTranscript: transcript) {
+            var snapshot = currentRelaySnapshot(endedAt: Date()) ?? emptyRelaySnapshot(endedAt: Date())
+            snapshot.transcript.append(TomRelayTranscriptLine(timestamp: Date(), text: transcript))
+            tomRelayCoordinator.askTom(question: question, snapshot: snapshot)
+        }
         runTutorTurn(.pushToTalk(transcript: transcript))
+    }
+
+    /// Status-window Ask Tom. Returns immediately; ChatGPT is not called.
+    func askTomFromStatusWindow(question: String) {
+        let asksBefore = tomRelayCoordinator.asksUsedThisSession
+        let snapshot = currentRelaySnapshot(endedAt: Date()) ?? emptyRelaySnapshot(endedAt: Date())
+        tomRelayCoordinator.askTom(question: question, snapshot: snapshot)
+        guard tomRelayCoordinator.asksUsedThisSession > asksBefore else { return }
+        let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        sessionJournal?.appendTranscript(speaker: "raza", text: trimmedQuestion, trigger: "ask_tom")
+        rememberRelayTranscript(text: trimmedQuestion)
     }
 
     /// Bar-close and sharp-change triggers: skipped while the user is talking
@@ -600,12 +639,14 @@ final class CompanionManager: ObservableObject {
                 guard !Task.isCancelled, let latestCapture = tutorEventMonitor.latestCapture else { return }
 
                 let framesToSend = tutorEventMonitor.frameBuffer.framesToSend()
+                recordRelayFrame(for: trigger, framesToSend: framesToSend)
                 let requestTime = Date()
                 let journal = sessionJournal
                 let journalTurn = journal?.beginTurn() ?? 0
                 let journalFrameFiles = journal?.writeFrames(framesToSend, turn: journalTurn) ?? []
                 if case .pushToTalk(let transcript) = trigger {
                     journal?.appendTranscript(speaker: "raza", text: transcript, trigger: trigger.journalName)
+                    rememberRelayTranscript(text: transcript)
                 }
                 var journaledRequestBody: [String: Any]?
                 let labeledImages = framesToSend.enumerated().map { index, frame in
@@ -617,6 +658,7 @@ final class CompanionManager: ObservableObject {
 
                 let fullResponseText: String
                 do {
+                    relayModelCallCount += 1
                     fullResponseText = try await CompanionBrain.requestResponse(
                         images: labeledImages,
                         systemPrompt: TutorPromptComposer.instructions(
@@ -650,7 +692,16 @@ final class CompanionManager: ObservableObject {
                 if let updatedSummary = parsedReply.updatedSummary {
                     rollingSessionSummary = updatedSummary
                 }
+                let tradeCountBeforeObservation = relayObservations.trades.count
+                if let observationJSON = parsedReply.observationJSON {
+                    relayObservations.merge(TomObservationParser.parse(jsonText: observationJSON))
+                }
+                if relayObservations.trades.count > tradeCountBeforeObservation, let latestFrame = framesToSend.last {
+                    recordRelayFrame(latestFrame, reason: TomRelayFrameReason.trade)
+                }
+                let drawObjects = TomRelayPayloadBuilder.drawObjects(in: fullResponseText)
                 if parsedReply.isSilent {
+                    rememberRelayModelReply(text: parsedReply.updatedSummary ?? "", drawObjects: drawObjects, at: requestTime)
                     print("🤫 Tom stayed silent (\(trigger.journalName))")
                     lastModelReply = "Tom stayed quiet."
                     if !trigger.isAutomatic { voiceState = .idle }
@@ -659,6 +710,8 @@ final class CompanionManager: ObservableObject {
                 let spokenText = TutorResponseSafetyFilter.filtered(parsedReply.spokenText)
                 lastModelReply = spokenText
                 journal?.appendTranscript(speaker: "tom", text: spokenText, trigger: trigger.journalName)
+                rememberRelayTranscript(text: spokenText)
+                rememberRelayModelReply(text: spokenText, drawObjects: drawObjects, at: requestTime)
 
                 drawingOverlayController.show(
                     drawing,
@@ -750,5 +803,106 @@ final class CompanionManager: ObservableObject {
             self.onboardingPromptText.append(message[index])
             currentIndex += 1
         }
+    }
+
+    // MARK: - Ask Tom session snapshot
+
+    private func beginRelaySession(identifier: String, startedAt: Date) {
+        relayFrames = []
+        relayTranscript = []
+        relayModelReplies = []
+        relayObservations = TomSessionObservations()
+        relaySessionStartedAt = startedAt
+        relaySessionIdentifier = identifier
+        relayModelCallCount = 0
+        relaySessionClosed = false
+    }
+
+    /// Posts session_end once. Switch-off and quit both come through here.
+    private func finishRelaySession() {
+        guard !relaySessionClosed,
+              let startedAt = relaySessionStartedAt,
+              let sessionIdentifier = relaySessionIdentifier else { return }
+        relaySessionClosed = true
+        let snapshot = makeRelaySnapshot(identifier: sessionIdentifier, startedAt: startedAt, endedAt: Date())
+        tomRelayCoordinator.deliverSessionEnd(snapshot: snapshot, sessionDirectory: sessionJournal?.sessionDirectory)
+    }
+
+    private func currentRelaySnapshot(endedAt: Date) -> TomRelaySessionSnapshot? {
+        guard !relaySessionClosed,
+              let startedAt = relaySessionStartedAt,
+              let sessionIdentifier = relaySessionIdentifier else { return nil }
+        return makeRelaySnapshot(identifier: sessionIdentifier, startedAt: startedAt, endedAt: endedAt)
+    }
+
+    private func emptyRelaySnapshot(endedAt: Date) -> TomRelaySessionSnapshot {
+        makeRelaySnapshot(identifier: "no-session", startedAt: endedAt, endedAt: endedAt)
+    }
+
+    private func makeRelaySnapshot(identifier: String, startedAt: Date, endedAt: Date) -> TomRelaySessionSnapshot {
+        TomRelaySessionSnapshot(
+            sessionIdentifier: identifier,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.6",
+            pickedWindowApplicationName: pickedTradingWindow?.applicationName,
+            pickedWindowTitle: pickedTradingWindow?.windowTitle,
+            transcript: relayTranscript,
+            modelReplies: relayModelReplies,
+            ruleFlags: relayObservations.ruleFlags,
+            callsUsed: relayModelCallCount,
+            trades: relayObservations.trades,
+            account: relayObservations.account,
+            frames: relayFrames,
+            summary: rollingSessionSummary
+        )
+    }
+
+    private func recordRelayFrame(for trigger: TutorTrigger, framesToSend: [TutorFrame]) {
+        guard let latestFrame = framesToSend.last else { return }
+        switch trigger {
+        case .pushToTalk:
+            recordRelayFrame(latestFrame, reason: TomRelayFrameReason.speech)
+        case .barClose:
+            recordRelayFrame(latestFrame, reason: TomRelayFrameReason.barClose)
+        case .sharpChange:
+            break
+        }
+    }
+
+    private func recordRelayFrame(_ frame: TutorFrame, reason: String) {
+        relayFrames.append(TomRelayFrame(capturedAt: frame.capturedAt, reason: reason, jpegData: frame.jpegData))
+        if relayFrames.count > 12 {
+            relayFrames.removeFirst(relayFrames.count - 12)
+        }
+    }
+
+    private func rememberRelayTranscript(text: String, at date: Date = Date()) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        relayTranscript.append(TomRelayTranscriptLine(timestamp: date, text: trimmedText))
+        if relayTranscript.count > 200 {
+            relayTranscript.removeFirst(relayTranscript.count - 200)
+        }
+    }
+
+    private func rememberRelayModelReply(text: String, drawObjects: [[String: Any]], at date: Date) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty || !drawObjects.isEmpty else { return }
+        relayModelReplies.append(TomRelayModelReply(timestamp: date, text: trimmedText, drawObjects: drawObjects))
+        if relayModelReplies.count > 100 {
+            relayModelReplies.removeFirst(relayModelReplies.count - 100)
+        }
+    }
+
+    /// Spoken and shown as a review. It does not draw and it does not start a tutor turn.
+    private func presentTomReview(text: String, ruleTag: String?) {
+        guard isTomLensSwitchedOn else { return }
+        var journalText = text
+        if let ruleTag, !ruleTag.isEmpty {
+            journalText += " (rule: \(ruleTag))"
+        }
+        sessionJournal?.appendTranscript(speaker: "tom-review", text: journalText, trigger: "ask_tom")
+        speechSynthesizerClient.enqueueText("Tom, review. \(text)")
     }
 }

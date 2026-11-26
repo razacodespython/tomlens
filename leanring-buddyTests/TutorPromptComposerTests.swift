@@ -15,6 +15,8 @@ struct TutorPromptComposerTests {
         #expect(instructions.contains("must never claim you did"))
         #expect(instructions.contains("<draw>"))
         #expect(instructions.contains("<summary>"))
+        #expect(instructions.contains("screen_read"))
+        #expect(instructions.contains("Never invent"))
         #expect(instructions.hasSuffix("Marked 80 at 21050."))
         #expect(TutorPromptComposer.instructions(ruleset: "  ", rollingSummary: "").hasPrefix(TutorPromptComposer.fallbackRuleset))
     }
@@ -27,6 +29,10 @@ struct TutorPromptComposerTests {
         #expect(TutorPromptComposer.parseReply("   ").isSilent)
         let longSummary = TutorPromptComposer.parseReply("<summary>\(String(repeating: "x", count: 900))</summary>ok")
         #expect(longSummary.updatedSummary?.count == TutorPromptComposer.maximumSummaryCharacters)
+        let observed = TutorPromptComposer.parseReply("Noted. <observe>{\"trades\":[]}</observe> <summary>s</summary>")
+        #expect(observed.spokenText == "Noted.")
+        #expect(observed.observationJSON == "{\"trades\":[]}")
+        #expect(!observed.spokenText.contains("observe"))
     }
 
     @Test func frameLabelsCarrySizeAndAge() {

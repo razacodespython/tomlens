@@ -30,6 +30,7 @@ nonisolated enum TutorPromptComposer {
     Output format:
     - Optionally end with <draw>[...]</draw>: shapes in the LAST frame's pixel space, origin top-left: {"type":"level","y":312,"label":"80"}, {"type":"circle","x":640,"y":300,"r":40,"label":"fork"}, {"type":"arrow","from":[600,420],"to":[640,300]}, {"type":"point","x":700,"y":280,"label":"entry"}. At most three shapes; <draw>[]</draw> or no tag means no drawing.
     - Always end with <summary>...</summary>: an updated running session summary under 400 characters (levels marked, setups seen, trades and results Raza mentioned, rule warnings). It is not spoken.
+    - Only when a trade or an account number is actually visible in the picked window, or Raza just said it, append <observe>{"trades":[{"side":{"value":"long","source":"raza_said","confidence":0.9}}],"account":{},"rule_flags":["late entry"]}</observe>. Each value is {"value":...,"source":"screen_read" or "raza_said","confidence":0 to 1}. Omit every field you did not see or hear. Never invent a fill, a price, a balance, or a P&L. The tag is not spoken.
     - For automatic checks with nothing important to say, reply with exactly <silent/> plus the summary tag.
     """
 
@@ -51,11 +52,21 @@ nonisolated enum TutorPromptComposer {
         let spokenText: String
         let updatedSummary: String?
         let isSilent: Bool
+        var observationJSON: String? = nil
     }
 
-    /// Removes <summary> and <silent/> tags (call after the draw tag is removed).
+    /// Removes <observe>, <summary> and <silent/> tags (call after the draw tag is removed).
     static func parseReply(_ replyText: String) -> ParsedReply {
         var remainingText = replyText
+        var observationJSON: String?
+        if let observeRange = remainingText.range(of: #"<observe>([\s\S]*?)</observe>"#, options: .regularExpression) {
+            let observeBody = remainingText[observeRange]
+                .replacingOccurrences(of: "<observe>", with: "")
+                .replacingOccurrences(of: "</observe>", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            observationJSON = String(observeBody.prefix(20_000))
+            remainingText.removeSubrange(observeRange)
+        }
         var updatedSummary: String?
         if let summaryRange = remainingText.range(of: #"<summary>([\s\S]*?)</summary>"#, options: .regularExpression) {
             let summaryBody = remainingText[summaryRange]
@@ -68,7 +79,12 @@ nonisolated enum TutorPromptComposer {
         let isSilent = remainingText.range(of: #"<silent\s*/?>"#, options: .regularExpression) != nil
         remainingText = remainingText.replacingOccurrences(of: #"<silent\s*/?>"#, with: "", options: .regularExpression)
         let spokenText = remainingText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ParsedReply(spokenText: isSilent ? "" : spokenText, updatedSummary: updatedSummary, isSilent: isSilent || spokenText.isEmpty)
+        return ParsedReply(
+            spokenText: isSilent ? "" : spokenText,
+            updatedSummary: updatedSummary,
+            isSilent: isSilent || spokenText.isEmpty,
+            observationJSON: observationJSON
+        )
     }
 }
 

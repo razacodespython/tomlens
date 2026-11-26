@@ -22,6 +22,12 @@ final class AppleSpeechSynthesizerClient {
     /// Starts speaking immediately and returns; playback continues in the background.
     func speakText(_ text: String) throws {
         stopPlayback()
+        enqueueText(text)
+    }
+
+    /// Queues speech without cutting off a ChatGPT reply already in progress.
+    /// Tom's review is advisory and must not interrupt the live answer.
+    func enqueueText(_ text: String) {
         let cleanedText = PushToTalkUtterancePolicy.cleanedTextForSpeech(text)
         guard !cleanedText.isEmpty else { return }
         let utterance = AVSpeechUtterance(string: cleanedText)
