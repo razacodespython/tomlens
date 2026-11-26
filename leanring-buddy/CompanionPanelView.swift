@@ -76,6 +76,10 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 16)
             }
 
+            TomLensUpdateSection(usesMenuBarChrome: true)
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+
             Spacer()
                 .frame(height: 12)
 
