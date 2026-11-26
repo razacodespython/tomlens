@@ -265,7 +265,7 @@ struct BlueCursorView: View {
                 TomFaceView(pose: pose, diameter: 30)
                     .scaleEffect(buddyFlightScale)
                     .opacity(buddyIsVisibleOnThisScreen ? cursorOpacity : 0)
-                    .position(x: cursorPosition.x, y: cursorPosition.y + CGFloat(pose.bobOffsetY + pose.hopOffsetY))
+                    .position(x: cursorPosition.x, y: cursorPosition.y + CGFloat(pose.bobOffsetY))
             }
             .animation(
                 buddyNavigationMode == .followingCursor && !accessibilityReduceMotion
@@ -665,8 +665,7 @@ struct BlueCursorView: View {
     }
 }
 
-/// Matte lime ball with a shallow upturned seam, red oval eyes, and side panels.
-/// Original drawing. The overlay stays click-through and never moves the pointer.
+/// The flat green Tom face. Eyes are vertical pills, slightly below center.
 private struct TomFaceView: View {
     let pose: TomCursorPose
     let diameter: CGFloat
@@ -675,123 +674,43 @@ private struct TomFaceView: View {
         Color(red: TomFaceGeometry.greenRed, green: TomFaceGeometry.greenGreen, blue: TomFaceGeometry.greenBlue)
     }
 
-    private var highlight: Color {
-        Color(red: TomFaceGeometry.highlightRed, green: TomFaceGeometry.highlightGreen, blue: TomFaceGeometry.highlightBlue)
-    }
-
-    private var earLine: Color {
-        Color(red: TomFaceGeometry.earRed, green: TomFaceGeometry.earGreen, blue: TomFaceGeometry.earBlue)
-    }
-
-    private var earInterior: Color {
-        Color(red: TomFaceGeometry.earInteriorRed, green: TomFaceGeometry.earInteriorGreen, blue: TomFaceGeometry.earInteriorBlue)
-    }
-
-    private var ledColor: Color {
+    private var eyeColor: Color {
         Color(red: TomFaceGeometry.eyeRed, green: TomFaceGeometry.eyeGreen, blue: TomFaceGeometry.eyeBlue)
     }
 
     var body: some View {
         ZStack {
-            earPanel(side: -1)
-            earPanel(side: 1)
+            if pose.showsPulse {
+                Circle()
+                    .stroke(faceGreen.opacity(0.45), lineWidth: 2)
+                    .frame(width: diameter, height: diameter)
+                    .scaleEffect(CGFloat(pose.pulseScale))
+            }
             Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            highlight,
-                            faceGreen,
-                            Color(red: 0.38, green: 0.62, blue: 0.12)
-                        ],
-                        center: UnitPoint(x: 0.36, y: 0.30),
-                        startRadius: diameter * 0.02,
-                        endRadius: diameter * 0.58
-                    )
-                )
+                .fill(faceGreen)
                 .frame(width: diameter, height: diameter)
-                .overlay(seam)
-                .overlay(eyes)
-                .clipShape(Circle())
+            HStack(spacing: diameter * CGFloat(TomFaceGeometry.eyeSpacingFraction)) {
+                eye
+                eye
+            }
+            .offset(y: diameter * CGFloat(TomFaceGeometry.eyeCenterYFraction))
+            .offset(
+                x: diameter * 0.08 * CGFloat(pose.eyeOffsetX),
+                y: diameter * 0.08 * CGFloat(pose.eyeOffsetY)
+            )
         }
         .scaleEffect(x: CGFloat(pose.scaleX), y: CGFloat(pose.scaleY))
         .rotationEffect(.degrees(pose.tiltDegrees))
-        .frame(width: diameter * 1.85, height: diameter * 1.85)
-    }
-
-    @ViewBuilder
-    private func earPanel(side: CGFloat) -> some View {
-        if pose.earFlapDegrees < 8 {
-            closedEarLine(side: side)
-        } else {
-            RoundedRectangle(cornerRadius: diameter * 0.06, style: .continuous)
-                .fill(earInterior)
-                .overlay(
-                    RoundedRectangle(cornerRadius: diameter * 0.06, style: .continuous)
-                        .stroke(earLine, lineWidth: max(1, diameter * 0.02))
-                )
-                .frame(width: diameter * 0.16, height: diameter * 0.50)
-                .rotationEffect(.degrees(Double(side) * (78 - pose.earFlapDegrees)), anchor: .bottom)
-                .offset(x: side * diameter * 0.20, y: -diameter * 0.36)
-        }
-    }
-
-    private func closedEarLine(side: CGFloat) -> some View {
-        let start = CGPoint(x: side * diameter * 0.045, y: -diameter * 0.40)
-        let end = CGPoint(x: side * diameter * 0.24, y: -diameter * 0.13)
-        let control = CGPoint(x: side * diameter * 0.16, y: -diameter * 0.30)
-        return Path { path in
-            path.move(to: start)
-            path.addQuadCurve(to: end, control: control)
-        }
-        .stroke(earLine, style: StrokeStyle(lineWidth: max(1, diameter * 0.016), lineCap: .round))
-    }
-
-    private var seam: some View {
-        let span = diameter * CGFloat(TomFaceGeometry.seamHalfSpanFraction)
-        let midY = diameter * CGFloat(TomFaceGeometry.seamCenterYFraction)
-        let droop = diameter * CGFloat(TomFaceGeometry.seamDroopFraction)
-        return Path { path in
-            path.move(to: CGPoint(x: -span, y: midY + droop))
-            path.addQuadCurve(
-                to: CGPoint(x: span, y: midY + droop),
-                control: CGPoint(x: 0, y: midY - droop)
-            )
-        }
-        .stroke(
-            Color(red: TomFaceGeometry.seamRed, green: TomFaceGeometry.seamGreen, blue: TomFaceGeometry.seamBlue),
-            style: StrokeStyle(lineWidth: max(1, diameter * CGFloat(TomFaceGeometry.seamThicknessFraction)), lineCap: .round)
-        )
-    }
-
-    private var eyes: some View {
-        HStack(spacing: diameter * CGFloat(TomFaceGeometry.eyeSpacingFraction)) {
-            eye
-            eye
-        }
-        .offset(y: diameter * CGFloat(TomFaceGeometry.eyeCenterYFraction))
-        .offset(
-            x: diameter * 0.06 * CGFloat(pose.eyeOffsetX),
-            y: diameter * 0.06 * CGFloat(pose.eyeOffsetY)
-        )
+        .frame(width: diameter * 1.4, height: diameter * 1.4)
     }
 
     private var eye: some View {
-        let width = diameter * CGFloat(TomFaceGeometry.eyeWidthFraction * pose.eyeScaleX)
-        let height = diameter * CGFloat(TomFaceGeometry.eyeHeightFraction * pose.eyeScaleY)
-        let rim = Color(red: TomFaceGeometry.eyeRimRed, green: TomFaceGeometry.eyeRimGreen, blue: TomFaceGeometry.eyeRimBlue)
-        return ZStack {
-            if pose.showsPulse {
-                Ellipse()
-                    .fill(ledColor.opacity(0.35))
-                    .frame(width: width * 1.8, height: height * 1.45)
-            }
-            Ellipse()
-                .fill(rim)
-                .frame(width: width * 1.28, height: height * 1.18)
-            Ellipse()
-                .fill(ledColor)
-                .frame(width: width, height: height)
-        }
+        Capsule()
+            .fill(eyeColor)
+            .frame(
+                width: diameter * CGFloat(TomFaceGeometry.eyeWidthFraction * pose.eyeScaleX),
+                height: diameter * CGFloat(TomFaceGeometry.eyeHeightFraction * pose.eyeScaleY)
+            )
     }
 }
 

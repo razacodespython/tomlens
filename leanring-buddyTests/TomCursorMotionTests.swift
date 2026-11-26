@@ -21,7 +21,6 @@ struct TomCursorMotionTests {
         #expect(pose.tiltDegrees > 8)
         #expect(pose.eyeOffsetX > 0.5)
         #expect(pose.scaleX > pose.scaleY)
-        #expect(pose.hopOffsetY < 0)
     }
 
     @Test func idleVelocityCentersTheEyes() {
@@ -38,8 +37,6 @@ struct TomCursorMotionTests {
         #expect(pose.tiltDegrees == 0)
         #expect(pose.scaleX == 1)
         #expect(pose.scaleY == 1)
-        #expect(pose.hopOffsetY == 0)
-        #expect(pose.earFlapDegrees == TomFaceGeometry.earRestDegrees)
     }
 
     @Test func reduceMotionDropsDecorativeMovement() {
@@ -57,10 +54,8 @@ struct TomCursorMotionTests {
         #expect(pose.scaleX == 1)
         #expect(pose.scaleY == 1)
         #expect(pose.bobOffsetY == 0)
-        #expect(pose.hopOffsetY == 0)
         #expect(!pose.showsPulse)
         #expect(pose.eyeScaleY > 1)
-        #expect(pose.earFlapDegrees == TomFaceGeometry.earOpenDegrees)
     }
 
     @Test func listeningWidensTheEyesAndShowsAPulse() {
@@ -113,63 +108,13 @@ struct TomCursorMotionTests {
         #expect(!TomCursorMotion.isBlinking(time: 0.05, reduceMotion: true))
     }
 
-    @Test func movingOrSpeakingHopsAndListeningFlapsTheEars() {
-        let moving = TomCursorMotion.pose(
-            velocityX: 480,
-            velocityY: 0,
-            activity: .idle,
-            isPointing: false,
-            reduceMotion: false,
-            time: 0.2
-        )
-        let speaking = TomCursorMotion.pose(
-            velocityX: 0,
-            velocityY: 0,
-            activity: .speaking,
-            isPointing: false,
-            reduceMotion: false,
-            time: 0.2
-        )
-        let still = TomCursorMotion.pose(
-            velocityX: 0,
-            velocityY: 0,
-            activity: .idle,
-            isPointing: false,
-            reduceMotion: false,
-            time: 0.2
-        )
-        #expect(moving.hopOffsetY < 0)
-        #expect(speaking.hopOffsetY < 0)
-        #expect(speaking.earFlapDegrees > 10)
-        #expect(still.hopOffsetY == 0)
-        #expect(still.earFlapDegrees == 0)
-
-        let listeningEarly = TomCursorMotion.pose(
-            velocityX: 0,
-            velocityY: 0,
-            activity: .listening,
-            isPointing: false,
-            reduceMotion: false,
-            time: 0.05
-        )
-        let listeningLater = TomCursorMotion.pose(
-            velocityX: 0,
-            velocityY: 0,
-            activity: .listening,
-            isPointing: false,
-            reduceMotion: false,
-            time: 0.25
-        )
-        let speakingEarly = TomCursorMotion.speakingEarDegrees(time: 0.05, reduceMotion: false)
-        let speakingLater = TomCursorMotion.speakingEarDegrees(time: 0.25, reduceMotion: false)
-        let reducedA = TomCursorMotion.speakingEarDegrees(time: 0.05, reduceMotion: true)
-        let reducedB = TomCursorMotion.speakingEarDegrees(time: 0.9, reduceMotion: true)
-        #expect(listeningEarly.earFlapDegrees == TomFaceGeometry.earOpenDegrees)
-        #expect(listeningEarly.earFlapDegrees == listeningLater.earFlapDegrees)
-        #expect(listeningEarly.showsPulse)
-        #expect(speakingEarly != speakingLater)
-        #expect(reducedA == reducedB)
-        #expect(TomFaceGeometry.eyeHeightFraction > TomFaceGeometry.eyeWidthFraction)
-        #expect(TomFaceGeometry.seamCenterYFraction > TomFaceGeometry.eyeCenterYFraction)
+    @Test func eyesKeepTheirSizeAndSitCloserTogether() {
+        let originalGap = 0.34
+        let reduction = 1 - TomFaceGeometry.eyeSpacingFraction / originalGap
+        #expect(reduction >= 0.15)
+        #expect(reduction <= 0.20)
+        #expect(TomFaceGeometry.eyeWidthFraction == 0.16)
+        #expect(TomFaceGeometry.eyeHeightFraction == 0.34)
+        #expect(TomFaceGeometry.eyeCenterYFraction == 0.10)
     }
 }

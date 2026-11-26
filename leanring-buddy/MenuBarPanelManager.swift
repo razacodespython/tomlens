@@ -93,8 +93,8 @@ final class MenuBarPanelManager: NSObject {
             : "TomLens is off. \(TomLensStatusPresentation.switchedOffHint)"
     }
 
-    /// Template ball. Filled when on, outlined with a slash when off.
-    /// The mark is a circle, a shallow seam, and two oval eyes.
+    /// Template image of Tom's face. Filled when on, outlined with a slash
+    /// when off, so the menu bar shows which state the hotkey is in.
     private func makeTomLensMenuBarIcon(isTomLensSwitchedOn: Bool) -> NSImage {
         let iconSize: CGFloat = 18
         let image = NSImage(size: NSSize(width: iconSize, height: iconSize), flipped: false) { rect in
@@ -109,11 +109,11 @@ final class MenuBarPanelManager: NSObject {
             NSColor.black.set()
             if isTomLensSwitchedOn {
                 face.fill()
-                Self.drawMenuBarMark(in: faceRect, knockedOut: true)
+                Self.drawMenuBarEyes(in: faceRect, knockedOut: true)
             } else {
                 face.lineWidth = 1.4
                 face.stroke()
-                Self.drawMenuBarMark(in: faceRect, knockedOut: false)
+                Self.drawMenuBarEyes(in: faceRect, knockedOut: false)
                 let slash = NSBezierPath()
                 slash.move(to: CGPoint(x: rect.minX + 2, y: rect.minY + 2))
                 slash.line(to: CGPoint(x: rect.maxX - 2, y: rect.maxY - 2))
@@ -125,21 +125,17 @@ final class MenuBarPanelManager: NSObject {
         return image
     }
 
-    /// Two vertical ovals just above a seam whose ends rise. AppKit y is up,
-    /// so the seam's lower middle is a smaller y than its ends.
-    private static func drawMenuBarMark(in faceRect: NSRect, knockedOut: Bool) {
-        let eyeWidth = max(1.1, faceRect.width * 0.07)
-        let eyeHeight = max(1.8, faceRect.height * 0.12)
-        let leftCenter = faceRect.minX + faceRect.width * 0.35
-        let rightCenter = faceRect.minX + faceRect.width * 0.65
-        let eyeCenterY = faceRect.maxY - faceRect.height * 0.45
-        for centerX in [leftCenter, rightCenter] {
-            let eye = NSBezierPath(ovalIn: NSRect(
-                x: centerX - eyeWidth / 2,
-                y: eyeCenterY - eyeHeight / 2,
-                width: eyeWidth,
-                height: eyeHeight
-            ))
+    /// Two vertical pills, slightly below the face center. Knocked-out eyes
+    /// read correctly in a menu-bar template image.
+    private static func drawMenuBarEyes(in faceRect: NSRect, knockedOut: Bool) {
+        let eyeWidth = faceRect.width * CGFloat(TomFaceGeometry.eyeWidthFraction)
+        let eyeHeight = faceRect.height * CGFloat(TomFaceGeometry.eyeHeightFraction)
+        let eyeY = faceRect.midY - eyeHeight / 2 - faceRect.height * CGFloat(TomFaceGeometry.eyeCenterYFraction)
+        let spacing = faceRect.width * CGFloat(TomFaceGeometry.eyeSpacingFraction)
+        let leftX = faceRect.midX - spacing / 2 - eyeWidth
+        let rightX = faceRect.midX + spacing / 2
+        for eyeX in [leftX, rightX] {
+            let eye = NSBezierPath(roundedRect: NSRect(x: eyeX, y: eyeY, width: eyeWidth, height: eyeHeight), xRadius: eyeWidth / 2, yRadius: eyeWidth / 2)
             if knockedOut {
                 NSGraphicsContext.saveGraphicsState()
                 NSGraphicsContext.current?.compositingOperation = .destinationOut
@@ -150,27 +146,6 @@ final class MenuBarPanelManager: NSObject {
                 NSColor.black.setFill()
                 eye.fill()
             }
-        }
-        let seam = NSBezierPath()
-        let span = faceRect.width * 0.50
-        let midY = faceRect.maxY - faceRect.height * 0.55
-        let endY = midY - faceRect.height * 0.10
-        seam.move(to: CGPoint(x: faceRect.midX - span, y: endY))
-        seam.curve(
-            to: CGPoint(x: faceRect.midX + span, y: endY),
-            controlPoint1: CGPoint(x: faceRect.midX - span * 0.45, y: midY),
-            controlPoint2: CGPoint(x: faceRect.midX + span * 0.45, y: midY)
-        )
-        seam.lineWidth = 1.1
-        if knockedOut {
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current?.compositingOperation = .destinationOut
-            NSColor.black.setStroke()
-            seam.stroke()
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            NSColor.black.setStroke()
-            seam.stroke()
         }
     }
 
