@@ -13,7 +13,7 @@ CI builds an ad-hoc signature (`codesign -s -`) and then replaces the designated
 ```bash
 codesign --force --deep --sign - --options runtime \
   --entitlements leanring-buddy/leanring-buddy.entitlements \
-  -r 'designated => identifier "com.razacodespython.tomlens"' \
+  -r '=designated => identifier "com.razacodespython.tomlens"' \
   TomLens.app
 ```
 

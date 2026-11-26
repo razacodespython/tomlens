@@ -65,7 +65,7 @@ jobs:
           # the same across builds without a paid certificate or a stored key.
           codesign --force --deep --sign - --options runtime \
             --entitlements leanring-buddy/leanring-buddy.entitlements \
-            -r 'designated => identifier "com.razacodespython.tomlens"' \
+            -r '=designated => identifier "com.razacodespython.tomlens"' \
             "$app"
           requirement=$(codesign -d -r- "$app" 2>&1)
           echo "CODESIGN_DESIGNATED_REQUIREMENT_BEGIN"
