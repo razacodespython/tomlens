@@ -651,17 +651,16 @@ final class BuddyDictationManager: NSObject, ObservableObject {
 
     private func buildTranscriptionKeyterms() -> [String] {
         let baseKeyterms = [
-            "makesomething",
-            "Learning Buddy",
-            "Codex",
-            "Claude",
-            "Anthropic",
-            "OpenAI",
-            "SwiftUI",
-            "Xcode",
-            "Vercel",
-            "Next.js",
-            "localhost"
+            "TomLens",
+            "Tradovate",
+            "MNQ",
+            "Okala",
+            "80/20 fork",
+            "cross section",
+            "h setup",
+            "bar close",
+            "stop loss",
+            "profit target"
         ]
 
         let combinedKeyterms = baseKeyterms + contextualKeyterms

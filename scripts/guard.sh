@@ -6,14 +6,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_SOURCES="leanring-buddy"
+APP_SOURCES=(leanring-buddy leanring-buddy.xcodeproj leanring-buddyTests leanring-buddyUITests)
 PROJECT_FILE="leanring-buddy.xcodeproj/project.pbxproj"
 failures=0
 
 # forbid <description> <regex> [paths...]
 forbid() {
   local description="$1" pattern="$2"; shift 2
-  local paths=("$@"); [ ${#paths[@]} -eq 0 ] && paths=("$APP_SOURCES")
+  local paths=("$@"); [ ${#paths[@]} -eq 0 ] && paths=("${APP_SOURCES[@]}")
   local matches
   matches=$(rg -n --hidden -g '!scripts/guard.sh' -g '!.github/**' -g '!AGENTS.md' -g '!*.md' -e "$pattern" "${paths[@]}" 2>/dev/null || true)
   if [ -n "$matches" ]; then
@@ -28,6 +28,21 @@ forbid "no synthetic input events (CGEventPost / CGEvent init)" 'CGEventPost|\.p
 forbid "no cursor warping" 'CGWarpMouseCursorPosition|CGAssociateMouseAndMouseCursorPosition'
 forbid "no Accessibility actions" 'AXUIElementPerformAction'
 forbid "no AppleScript / scripting bridges" 'NSAppleScript|OSAScript|SBApplication'
+
+echo "== M1: telemetry, paid services, updater, AX, camera, login item removed =="
+forbid "no PostHog analytics" '(?i)posthog|ClickyAnalytics'
+forbid "no FormSpark" '(?i)submit-form\.com|formspark|submitEmail'
+forbid "no Sparkle updater" '(?i)sparkle|SUFeedURL|SUPublicEDKey|appcast'
+forbid "no PLCrashReporter" '(?i)plcrashreporter|PLCrash'
+forbid "no Mux video" '(?i)mux\.com'
+forbid "no Cloudflare Worker proxy" '(?i)workers\.dev|workerBaseURL'
+forbid "no paid AI/voice clients" '(?i)anthropic|ClaudeAPI|elevenlabs|assemblyai|OpenAIAudioTranscription|OpenAIAPI\b'
+forbid "no computer-use element detector" 'ElementLocationDetector'
+forbid "no Accessibility API at all" 'AXUIElement|AXIsProcessTrusted|kAXTrustedCheckOptionPrompt|Privacy_Accessibility'
+forbid "no login item" 'SMAppService|ServiceManagement|SMLoginItem'
+forbid "no camera entitlement or capture" 'com\.apple\.security\.device\.camera|AVCaptureDevice\.(default|DiscoverySession)\(.*video|NSCameraUsageDescription'
+forbid "no remote Swift packages (pbxproj)" 'XCRemoteSwiftPackageReference' leanring-buddy.xcodeproj
+if [ -e worker ] || [ -e appcast.xml ]; then echo "FAIL  worker/ or appcast.xml re-added"; failures=$((failures + 1)); else echo "ok    worker/ and appcast.xml absent"; fi
 
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
