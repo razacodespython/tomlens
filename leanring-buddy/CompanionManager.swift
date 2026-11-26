@@ -260,7 +260,8 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    /// Starts ~1 fps sampling of the picked window and the automatic triggers.
+    /// Starts ~1 fps sampling of the picked window for push-to-talk context.
+    /// The automatic-trigger callback stays wired, and the policy refuses every send.
     private func startTutorEventMonitor() {
         finishRelaySession()
         let startedAt = Date()
@@ -594,9 +595,9 @@ final class CompanionManager: ObservableObject {
         rememberRelayTranscript(text: trimmedQuestion)
     }
 
-    /// Bar-close and sharp-change triggers: skipped while the user is talking
-    /// or waiting on a reply, while plan usage is paused, or when only the
-    /// calls reserved for push-to-talk are left this hour.
+    /// Bar-close and sharp-change triggers. The policy refuses every send, so
+    /// these turns do not call the model or speak. Push-to-talk does not come
+    /// through here.
     private func handleAutomaticTrigger(_ trigger: TutorTrigger) {
         let isUserSpeakingOrWaiting = buddyDictationManager.isDictationInProgress
             || currentResponseTask != nil
@@ -844,7 +845,7 @@ final class CompanionManager: ObservableObject {
             sessionIdentifier: identifier,
             startedAt: startedAt,
             endedAt: endedAt,
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.6",
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.7",
             pickedWindowApplicationName: pickedTradingWindow?.applicationName,
             pickedWindowTitle: pickedTradingWindow?.windowTitle,
             transcript: relayTranscript,
