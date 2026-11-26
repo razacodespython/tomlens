@@ -69,6 +69,10 @@ final class CompanionManager: ObservableObject {
     private var audioPowerCancellable: AnyCancellable?
     private var permissionCheckTimer: Timer?
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
+    /// When the current push-to-talk hold began, for the accidental-tap check.
+    private var pushToTalkPressedAt: Date?
+    /// Force-stops the mic if a hold exceeds the maximum (e.g. a missed key-up).
+    private var pushToTalkMaximumHoldTask: Task<Void, Never>?
 
     /// True when the required permissions (screen recording, screen content,
     /// microphone) are granted. Used by the panel to show a single "all good" state.
@@ -139,6 +143,8 @@ final class CompanionManager: ObservableObject {
             globalPushToTalkShortcutMonitor.stop()
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = nil
+            pushToTalkMaximumHoldTask?.cancel()
+            pushToTalkMaximumHoldTask = nil
             buddyDictationManager.cancelCurrentDictation()
             currentResponseTask?.cancel()
             currentResponseTask = nil
@@ -369,6 +375,15 @@ final class CompanionManager: ObservableObject {
             }
     
 
+            pushToTalkPressedAt = Date()
+            pushToTalkMaximumHoldTask?.cancel()
+            pushToTalkMaximumHoldTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(PushToTalkUtterancePolicy.maximumHoldDurationSeconds * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                print("🎙️ Push-to-talk: maximum hold reached, closing the mic")
+                self?.buddyDictationManager.stopPushToTalkFromKeyboardShortcut()
+            }
+
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = Task {
                 await buddyDictationManager.startPushToTalkFromKeyboardShortcut(
@@ -377,6 +392,10 @@ final class CompanionManager: ObservableObject {
                         // Partial transcripts are hidden (waveform-only UI)
                     },
                     submitDraftText: { [weak self] finalTranscript in
+                        guard PushToTalkUtterancePolicy.shouldSubmit(transcript: finalTranscript) else {
+                            print("🗣️ Ignoring empty or noise-only transcript")
+                            return
+                        }
                         self?.lastTranscript = finalTranscript
                         print("🗣️ Companion received transcript: \(finalTranscript)")
                         self?.sendTranscriptToBrainWithScreenshot(transcript: finalTranscript)
@@ -390,7 +409,16 @@ final class CompanionManager: ObservableObject {
             // leaves the waveform overlay stuck on screen indefinitely.
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = nil
-            buddyDictationManager.stopPushToTalkFromKeyboardShortcut()
+            pushToTalkMaximumHoldTask?.cancel()
+            pushToTalkMaximumHoldTask = nil
+            let holdDurationSeconds = pushToTalkPressedAt.map { Date().timeIntervalSince($0) } ?? 0
+            pushToTalkPressedAt = nil
+            if PushToTalkUtterancePolicy.isAccidentalTap(holdDurationSeconds: holdDurationSeconds) {
+                // Accidental tap: close the mic and discard, no AI call.
+                buddyDictationManager.cancelCurrentDictation(preserveDraftText: false)
+            } else {
+                buddyDictationManager.stopPushToTalkFromKeyboardShortcut()
+            }
         case .none:
             break
         }

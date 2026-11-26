@@ -2,7 +2,8 @@
 //  AppleSpeechTranscriptionProvider.swift
 //  leanring-buddy
 //
-//  Local fallback transcription provider backed by Apple's Speech framework.
+//  The only transcription provider: Apple's Speech framework, on-device
+//  when the Mac supports it.
 //
 
 import AVFoundation
@@ -35,6 +36,7 @@ final class AppleSpeechTranscriptionProvider: BuddyTranscriptionProvider {
 
         return try AppleSpeechTranscriptionSession(
             speechRecognizer: speechRecognizer,
+            keyterms: keyterms,
             onTranscriptUpdate: onTranscriptUpdate,
             onFinalTranscriptReady: onFinalTranscriptReady,
             onError: onError
@@ -72,6 +74,7 @@ private final class AppleSpeechTranscriptionSession: NSObject, BuddyStreamingTra
 
     init(
         speechRecognizer: SFSpeechRecognizer,
+        keyterms: [String],
         onTranscriptUpdate: @escaping (String) -> Void,
         onFinalTranscriptReady: @escaping (String) -> Void,
         onError: @escaping (Error) -> Void
@@ -86,6 +89,8 @@ private final class AppleSpeechTranscriptionSession: NSObject, BuddyStreamingTra
         recognitionRequest.shouldReportPartialResults = true
         recognitionRequest.taskHint = .dictation
         recognitionRequest.addsPunctuation = true
+        // Bias recognition toward trading vocabulary (MNQ, Okala, fork...).
+        recognitionRequest.contextualStrings = keyterms
 
         if speechRecognizer.supportsOnDeviceRecognition {
             recognitionRequest.requiresOnDeviceRecognition = true

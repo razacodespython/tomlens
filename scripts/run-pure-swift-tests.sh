@@ -8,10 +8,12 @@ pure_sources=(
   leanring-buddy/TradingWindowCapturePolicy.swift
   leanring-buddy/TradingWindowCoordinateMapping.swift
   leanring-buddy/BuddyPushToTalkShortcut.swift
+  leanring-buddy/PushToTalkUtterancePolicy.swift
 )
 pure_tests=(
   leanring-buddyTests/TradingWindowCapturePolicyTests.swift
   leanring-buddyTests/BuddyPushToTalkShortcutTests.swift
+  leanring-buddyTests/PushToTalkUtterancePolicyTests.swift
 )
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT

@@ -102,6 +102,13 @@ else
   echo "FAIL  menu-bar on/off switch missing"; failures=$((failures + 1))
 fi
 
+echo "== M4: push-to-talk loop hardening =="
+if rg -q 'PushToTalkUtterancePolicy\.maximumHoldDurationSeconds' leanring-buddy/CompanionManager.swift; then
+  echo "ok    mic hold is force-capped"
+else
+  echo "FAIL  mic hold must be capped by PushToTalkUtterancePolicy.maximumHoldDurationSeconds"; failures=$((failures + 1))
+fi
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys

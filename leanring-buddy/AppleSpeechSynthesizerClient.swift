@@ -22,8 +22,11 @@ final class AppleSpeechSynthesizerClient {
     /// Starts speaking immediately and returns; playback continues in the background.
     func speakText(_ text: String) throws {
         stopPlayback()
-        let utterance = AVSpeechUtterance(string: text)
+        let cleanedText = PushToTalkUtterancePolicy.cleanedTextForSpeech(text)
+        guard !cleanedText.isEmpty else { return }
+        let utterance = AVSpeechUtterance(string: cleanedText)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
         speechSynthesizer.speak(utterance)
     }
 
