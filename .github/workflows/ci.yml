@@ -60,6 +60,25 @@ jobs:
       - name: Verify bundle
         run: |
           app="build/DerivedData/Build/Products/Release/TomLens.app"
+          # Plain ad-hoc signing pins Screen Recording to the cdhash, so each
+          # update looks revoked. An identifier designated requirement stays
+          # the same across builds without a paid certificate or a stored key.
+          codesign --force --deep --sign - --options runtime \
+            --entitlements leanring-buddy/leanring-buddy.entitlements \
+            -r '=designated => identifier "com.razacodespython.tomlens"' \
+            "$app"
+          requirement=$(codesign -d -r- "$app" 2>&1)
+          echo "CODESIGN_DESIGNATED_REQUIREMENT_BEGIN"
+          echo "$requirement"
+          echo "CODESIGN_DESIGNATED_REQUIREMENT_END"
+          python3 - "$requirement" <<'PY'
+          import sys
+          text = sys.argv[1]
+          if 'identifier "com.razacodespython.tomlens"' not in text:
+              sys.exit("designated requirement is not identifier-based")
+          if "cdhash" in text:
+              sys.exit("designated requirement still pins cdhash")
+          PY
           codesign --verify --verbose "$app"
           codesign --display --entitlements - "$app"
           min_os=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")

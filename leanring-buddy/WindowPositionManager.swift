@@ -21,6 +21,10 @@ enum PermissionRequestPresentationDestination: Equatable {
 @MainActor
 class WindowPositionManager {
     private static var hasAttemptedScreenRecordingSystemPromptDuringCurrentLaunch = false
+
+    static var hasAttemptedScreenRecordingSystemPrompt: Bool {
+        hasAttemptedScreenRecordingSystemPromptDuringCurrentLaunch
+    }
     private static let hasPreviouslyConfirmedScreenRecordingPermissionUserDefaultsKey = "com.learningbuddy.hasPreviouslyConfirmedScreenRecordingPermission"
 
     /// Returns true when the Mac currently has more than one connected display.

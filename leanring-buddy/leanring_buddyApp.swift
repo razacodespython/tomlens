@@ -30,21 +30,35 @@ struct leanring_buddyApp: App {
 @MainActor
 final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPanelManager: MenuBarPanelManager?
+    private var statusWindowController: TomLensStatusWindowController?
     private let companionManager = CompanionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("🎯 TomLens: Starting...")
         print("🎯 TomLens: Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")")
+        print("🎯 TomLens launches off. \(TomLensStatusPresentation.switchedOffHint)")
 
         UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 0])
 
         menuBarPanelManager = MenuBarPanelManager(companionManager: companionManager)
+        statusWindowController = TomLensStatusWindowController(companionManager: companionManager)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(openTomLensStatusWindow),
+            name: .tomLensShowStatusWindow,
+            object: nil
+        )
         companionManager.start()
+        statusWindowController?.show()
         // Auto-open the panel if the user still needs to do something:
         // either they haven't onboarded yet, or permissions were revoked.
         if !companionManager.hasCompletedOnboarding || !companionManager.allPermissionsGranted {
             menuBarPanelManager?.showPanelOnLaunch()
         }
+    }
+
+    @objc private func openTomLensStatusWindow() {
+        statusWindowController?.show()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

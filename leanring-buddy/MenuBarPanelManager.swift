@@ -46,7 +46,7 @@ final class MenuBarPanelManager: NSObject {
         createStatusItem()
 
         // Keep the menu bar icon in sync with the on/off switch so its state
-        // is always visible: filled triangle = on, outline = off.
+        // is always visible: filled face = on, outlined face = off.
         onOffSwitchCancellable = companionManager.$isTomLensSwitchedOn
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isTomLensSwitchedOn in
@@ -86,50 +86,67 @@ final class MenuBarPanelManager: NSObject {
         guard let button = statusItem?.button else { return }
         button.image = makeTomLensMenuBarIcon(isTomLensSwitchedOn: isTomLensSwitchedOn)
         button.image?.isTemplate = true
-        button.toolTip = isTomLensSwitchedOn ? "TomLens is on" : "TomLens is off"
+        // Dims the icon while the button stays clickable, so off is obvious.
+        button.appearsDisabled = !isTomLensSwitchedOn
+        button.toolTip = isTomLensSwitchedOn
+            ? "TomLens is on. Hold Control+Option+Z to talk."
+            : "TomLens is off. \(TomLensStatusPresentation.switchedOffHint)"
     }
 
-    /// Draws the cursor triangle as a menu bar icon. Uses the same shape
-    /// and rotation as the in-app cursor so the menu bar icon matches.
-    /// Filled when TomLens is on, outlined when it is off.
+    /// Template image of Tom's face. Filled when on, outlined with a slash
+    /// when off, so the menu bar shows which state the hotkey is in.
     private func makeTomLensMenuBarIcon(isTomLensSwitchedOn: Bool) -> NSImage {
         let iconSize: CGFloat = 18
-        let image = NSImage(size: NSSize(width: iconSize, height: iconSize))
-        image.lockFocus()
-
-        let triangleSize = iconSize * 0.7
-        let cx = iconSize * 0.50
-        let cy = iconSize * 0.50
-        let height = triangleSize * sqrt(3.0) / 2.0
-
-        let top = CGPoint(x: cx, y: cy + height / 1.5)
-        let bottomLeft = CGPoint(x: cx - triangleSize / 2, y: cy - height / 3)
-        let bottomRight = CGPoint(x: cx + triangleSize / 2, y: cy - height / 3)
-
-        let angle = 35.0 * .pi / 180.0
-        func rotate(_ point: CGPoint) -> CGPoint {
-            let dx = point.x - cx, dy = point.y - cy
-            let cosA = CGFloat(cos(angle)), sinA = CGFloat(sin(angle))
-            return CGPoint(x: cx + cosA * dx - sinA * dy, y: cy + sinA * dx + cosA * dy)
+        let image = NSImage(size: NSSize(width: iconSize, height: iconSize), flipped: false) { rect in
+            let diameter = min(rect.width, rect.height) * 0.86
+            let faceRect = NSRect(
+                x: rect.midX - diameter / 2,
+                y: rect.midY - diameter / 2,
+                width: diameter,
+                height: diameter
+            )
+            let face = NSBezierPath(ovalIn: faceRect)
+            NSColor.black.set()
+            if isTomLensSwitchedOn {
+                face.fill()
+                Self.drawMenuBarEyes(in: faceRect, knockedOut: true)
+            } else {
+                face.lineWidth = 1.4
+                face.stroke()
+                Self.drawMenuBarEyes(in: faceRect, knockedOut: false)
+                let slash = NSBezierPath()
+                slash.move(to: CGPoint(x: rect.minX + 2, y: rect.minY + 2))
+                slash.line(to: CGPoint(x: rect.maxX - 2, y: rect.maxY - 2))
+                slash.lineWidth = 1.4
+                slash.stroke()
+            }
+            return true
         }
-
-        let path = NSBezierPath()
-        path.move(to: rotate(top))
-        path.line(to: rotate(bottomLeft))
-        path.line(to: rotate(bottomRight))
-        path.close()
-
-        if isTomLensSwitchedOn {
-            NSColor.black.setFill()
-            path.fill()
-        } else {
-            NSColor.black.setStroke()
-            path.lineWidth = 1.5
-            path.stroke()
-        }
-
-        image.unlockFocus()
         return image
+    }
+
+    /// Two vertical pills, slightly below the face center. Knocked-out eyes
+    /// read correctly in a menu-bar template image.
+    private static func drawMenuBarEyes(in faceRect: NSRect, knockedOut: Bool) {
+        let eyeWidth = faceRect.width * CGFloat(TomFaceGeometry.eyeWidthFraction)
+        let eyeHeight = faceRect.height * CGFloat(TomFaceGeometry.eyeHeightFraction)
+        let eyeY = faceRect.midY - eyeHeight / 2 - faceRect.height * CGFloat(TomFaceGeometry.eyeCenterYFraction)
+        let spacing = faceRect.width * CGFloat(TomFaceGeometry.eyeSpacingFraction)
+        let leftX = faceRect.midX - spacing / 2 - eyeWidth
+        let rightX = faceRect.midX + spacing / 2
+        for eyeX in [leftX, rightX] {
+            let eye = NSBezierPath(roundedRect: NSRect(x: eyeX, y: eyeY, width: eyeWidth, height: eyeHeight), xRadius: eyeWidth / 2, yRadius: eyeWidth / 2)
+            if knockedOut {
+                NSGraphicsContext.saveGraphicsState()
+                NSGraphicsContext.current?.compositingOperation = .destinationOut
+                NSColor.black.setFill()
+                eye.fill()
+                NSGraphicsContext.restoreGraphicsState()
+            } else {
+                NSColor.black.setFill()
+                eye.fill()
+            }
+        }
     }
 
     /// Opens the panel automatically on app launch so the user sees

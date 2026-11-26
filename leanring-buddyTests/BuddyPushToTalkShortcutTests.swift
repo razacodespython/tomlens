@@ -18,9 +18,10 @@ struct BuddyPushToTalkShortcutTests {
         #expect(BuddyPushToTalkShortcut.shortcutTransition(for: .released, wasShortcutPreviouslyPressed: false) == .none)
     }
 
-    @Test func hotKeyIsControlOptionT() {
-        #expect(BuddyPushToTalkShortcut.carbonVirtualKeyCode == 0x11)
+    @Test func hotKeyIsControlOptionZ() {
+        #expect(BuddyPushToTalkShortcut.carbonVirtualKeyCode == 0x06)
         #expect(BuddyPushToTalkShortcut.carbonModifierFlags == 0x1800)
-        #expect(BuddyPushToTalkShortcut.keyCapsuleLabels == ["ctrl", "option", "T"])
+        #expect(BuddyPushToTalkShortcut.keyCapsuleLabels == ["ctrl", "option", "Z"])
+        #expect(BuddyPushToTalkShortcut.pushToTalkDisplayText == "ctrl + option + Z")
     }
 }
