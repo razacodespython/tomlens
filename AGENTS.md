@@ -43,7 +43,7 @@ Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, cons
 - **M7** `TutorTriggerPolicy` (push-to-talk, 3-minute bar close, sharp frame change, call headroom), `TutorEventMonitor` (~1 fps picked-window sampling, last 3 frames at 1024 px), `TutorPromptComposer` (bundled `TutorRulesetPrompt.md` + view-only rules + rolling `<summary>`, `<silent/>`), `TutorResponseSafetyFilter`.
 - **M8** `SessionJournal`: `~/TomLens/journal/<yyyyMMdd-HHmmss>/` frames, `transcript.jsonl`, `model.jsonl` (images replaced by file names; no credentials).
 - Pure files are `nonisolated` (the app target defaults to MainActor) and listed in `scripts/run-pure-swift-tests.sh`.
-- Next: M9 release artifact + install runbook (needs a GitHub remote).
+- **M9** macOS CI builds and tests an ad-hoc-signed `TomLens.app` and uploads `TomLens-unsigned-app`. `INSTALL.md` is the unsigned-app install runbook.
 
 ## Engineering rules
 

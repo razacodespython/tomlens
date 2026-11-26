@@ -9,6 +9,10 @@ import Carbon.HIToolbox
 import Testing
 @testable import TomLens
 
+/// WindowPositionManager is MainActor-isolated. The test target does not
+/// inherit the app target's default actor isolation, so these checks run
+/// on the main actor explicitly.
+@MainActor
 struct leanring_buddyTests {
 
     @Test func firstPermissionRequestUsesSystemPromptOnly() async throws {

@@ -7,6 +7,7 @@
 //  opens a floating panel with companion voice controls.
 //
 
+import AppKit
 import SwiftUI
 
 @main
