@@ -44,6 +44,26 @@ forbid "no camera entitlement or capture" 'com\.apple\.security\.device\.camera|
 forbid "no remote Swift packages (pbxproj)" 'XCRemoteSwiftPackageReference' leanring-buddy.xcodeproj
 if [ -e worker ] || [ -e appcast.xml ]; then echo "FAIL  worker/ or appcast.xml re-added"; failures=$((failures + 1)); else echo "ok    worker/ and appcast.xml absent"; fi
 
+echo "== M2: capture exactly one picked window =="
+forbid "no display-wide capture filters" 'SCContentFilter\(\s*display'
+forbid "no system content picker (could grant a display)" 'SCContentSharingPicker'
+forbid "no legacy full-screen capture APIs" 'CGWindowListCreateImage|CGDisplayCreateImage|CGDisplayStream|/usr/sbin/screencapture|captureAllScreens'
+if rg -q 'SCContentFilter\(desktopIndependentWindow:' leanring-buddy/CompanionScreenCaptureUtility.swift \
+   && rg -q 'forLiveWindow: liveCandidate' leanring-buddy/CompanionScreenCaptureUtility.swift; then
+  echo "ok    capture uses desktopIndependentWindow and re-checks the policy"
+else
+  echo "FAIL  capture must use SCContentFilter(desktopIndependentWindow:) and TradingWindowCapturePolicy"; failures=$((failures + 1))
+fi
+missing_denylist_keywords=""
+for required_keyword in wallet metamask hyperliquid rabby phantom; do
+  rg -q "\"$required_keyword\"" leanring-buddy/TradingWindowCapturePolicy.swift || missing_denylist_keywords="$missing_denylist_keywords $required_keyword"
+done
+if [ -n "$missing_denylist_keywords" ]; then
+  echo "FAIL  denylist lost keywords:$missing_denylist_keywords"; failures=$((failures + 1))
+else
+  echo "ok    denylist keywords present (wallet, metamask, hyperliquid, rabby, phantom)"
+fi
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys

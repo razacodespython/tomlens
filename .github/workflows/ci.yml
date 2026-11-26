@@ -20,9 +20,18 @@ jobs:
       - name: Run guard
         run: ./scripts/guard.sh
 
+  logic-tests:
+    name: Pure-Swift logic tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run pure-Swift tests
+        run: ./scripts/run-pure-swift-tests.sh
+
   build:
     name: Build + test (unsigned .app)
-    needs: guard
+    needs: [guard, logic-tests]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

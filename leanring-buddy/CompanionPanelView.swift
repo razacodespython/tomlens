@@ -24,6 +24,14 @@ struct CompanionPanelView: View {
                 .padding(.top, 16)
                 .padding(.horizontal, 16)
 
+            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+                Spacer()
+                    .frame(height: 12)
+
+                tradingWindowPickerRow
+                    .padding(.horizontal, 16)
+            }
+
             if !companionManager.allPermissionsGranted {
                 Spacer()
                     .frame(height: 16)
@@ -206,7 +214,7 @@ struct CompanionPanelView: View {
                         .foregroundColor(DS.Colors.textSecondary)
 
                     Text(isGranted
-                         ? "Only takes a screenshot when you use the hotkey"
+                         ? "Only sees the one window you pick"
                          : "Quit and reopen after granting")
                         .font(.system(size: 10))
                         .foregroundColor(DS.Colors.textTertiary)
@@ -402,6 +410,54 @@ struct CompanionPanelView: View {
     }
 
 
+
+    // MARK: - Trading Window Picker
+
+    /// Picks the single window TomLens may see. Defaults to the Tradovate
+    /// desktop app; denylisted windows are never listed; browsers get a warning.
+    private var tradingWindowPickerRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Window")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(DS.Colors.textSecondary)
+
+                Spacer()
+
+                Menu {
+                    ForEach(companionManager.pickableTradingWindows) { candidate in
+                        Button(candidate.menuLabel) {
+                            companionManager.pickTradingWindow(candidate)
+                        }
+                    }
+                    if companionManager.pickableTradingWindows.isEmpty {
+                        Text("No windows found")
+                    }
+                } label: {
+                    Text(companionManager.pickedTradingWindow?.menuLabel ?? "Pick a window")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(DS.Colors.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 190, alignment: .trailing)
+                .pointerCursor()
+            }
+
+            if let pickedTradingWindowWarning = companionManager.pickedTradingWindowWarning {
+                Text(pickedTradingWindowWarning)
+                    .font(.system(size: 10))
+                    .foregroundColor(DS.Colors.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 4)
+        .onAppear {
+            companionManager.refreshPickableTradingWindows()
+        }
+    }
 
     // MARK: - Show Clicky Cursor Toggle
 

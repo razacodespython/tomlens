@@ -83,6 +83,47 @@ final class CompanionManager: ObservableObject {
     /// Used by the panel to show accurate status text ("Active" vs "Ready").
     @Published private(set) var isOverlayVisible: Bool = false
 
+    // MARK: - Picked Trading Window
+
+    /// The one window TomLens may capture. Persisted; nil until picked.
+    @Published private(set) var pickedTradingWindow: PickedTradingWindowSelection? = PickedTradingWindowStore.load()
+    /// Windows the user can pick from. Denylisted windows never appear.
+    @Published private(set) var pickableTradingWindows: [CapturableWindowCandidate] = []
+
+    /// Shown in the panel when the picked window is a browser window.
+    var pickedTradingWindowWarning: String? {
+        guard let pickedTradingWindow,
+              TradingWindowCapturePolicy.isBrowser(bundleIdentifier: pickedTradingWindow.bundleIdentifier) else {
+            return nil
+        }
+        return "This is a browser window: TomLens would see every tab and extension in it. Use the Tradovate desktop app instead."
+    }
+
+    /// Re-lists shareable windows and pre-picks the Tradovate desktop app
+    /// when nothing has been picked yet.
+    func refreshPickableTradingWindows() {
+        guard hasScreenRecordingPermission else { return }
+        Task {
+            do {
+                let pickerCandidates = try await CompanionScreenCaptureUtility.pickerCandidates()
+                pickableTradingWindows = pickerCandidates
+                if pickedTradingWindow == nil,
+                   let defaultPick = TradingWindowCapturePolicy.defaultPick(from: pickerCandidates) {
+                    pickTradingWindow(defaultPick)
+                }
+            } catch {
+                print("⚠️ Couldn't list shareable windows: \(error)")
+            }
+        }
+    }
+
+    func pickTradingWindow(_ candidate: CapturableWindowCandidate) {
+        guard TradingWindowCapturePolicy.decision(for: candidate).isAllowed else { return }
+        let selection = PickedTradingWindowSelection(candidate: candidate)
+        PickedTradingWindowStore.save(selection)
+        pickedTradingWindow = selection
+    }
+
     /// User preference for whether the Clicky cursor should be shown.
     /// When toggled off, the overlay is hidden and push-to-talk is disabled.
     /// Persisted to UserDefaults so the choice survives app restarts.
@@ -121,6 +162,7 @@ final class CompanionManager: ObservableObject {
         bindAudioPowerLevel()
         bindShortcutTransitions()
         globalPushToTalkShortcutMonitor.start()
+        refreshPickableTradingWindows()
 
         // If the user already completed onboarding AND all permissions are
         // still granted, show the cursor overlay immediately. If permissions
@@ -215,12 +257,19 @@ final class CompanionManager: ObservableObject {
         isRequestingScreenContent = true
         Task {
             do {
-                let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-                guard let display = content.displays.first else {
+                // Probe with a single allowed window (never a display-wide
+                // filter) so the grant is verified without seeing the screen.
+                let shareableWindows = try await CompanionScreenCaptureUtility.shareableWindows()
+                let pickerCandidates = TradingWindowCapturePolicy.pickerCandidates(
+                    from: shareableWindows.map(\.candidate),
+                    excludingBundleIdentifier: Bundle.main.bundleIdentifier
+                )
+                guard let probeCandidate = pickerCandidates.first,
+                      let probeWindow = shareableWindows.first(where: { $0.window.windowID == probeCandidate.windowID })?.window else {
                     await MainActor.run { isRequestingScreenContent = false }
                     return
                 }
-                let filter = SCContentFilter(display: display, excludingWindows: [])
+                let filter = SCContentFilter(desktopIndependentWindow: probeWindow)
                 let config = SCStreamConfiguration()
                 config.width = 320
                 config.height = 240
@@ -234,6 +283,7 @@ final class CompanionManager: ObservableObject {
                     guard didCapture else { return }
                     hasScreenContentPermission = true
                     UserDefaults.standard.set(true, forKey: "hasScreenContentPermission")
+                    refreshPickableTradingWindows()
 
                     // If onboarding was already completed, show the cursor overlay now
                     if hasCompletedOnboarding && allPermissionsGranted && !isOverlayVisible && isClickyCursorEnabled {
@@ -390,7 +440,7 @@ final class CompanionManager: ObservableObject {
     // MARK: - Companion Prompt
 
     private static let companionVoiceResponseSystemPrompt = """
-    you're clicky, a friendly always-on companion that lives in the user's menu bar. the user just spoke to you via push-to-talk and you can see their screen(s). your reply will be spoken aloud via text-to-speech, so write the way you'd actually talk. this is an ongoing conversation — you remember everything they've said before.
+    you're tomlens, a view-only trading tutor that lives in the user's menu bar. the user just spoke to you via push-to-talk and you can see the one trading window they picked, nothing else. your reply will be spoken aloud via text-to-speech, so write the way you'd actually talk. this is an ongoing conversation — you remember everything they've said before.
 
     rules:
     - default to one or two sentences. be direct and dense. BUT if the user asks you to explain more, go deeper, or elaborate, then go all out — give a thorough, detailed explanation with no length limit.
@@ -404,7 +454,6 @@ final class CompanionManager: ObservableObject {
     - don't read out code verbatim. describe what the code does or what needs to change conversationally.
     - focus on giving a thorough, useful explanation. don't end with simple yes/no questions like "want me to explain more?" or "should i show you?" — those are dead ends that force the user to just say yes.
     - instead, when it fits naturally, end by planting a seed — mention something bigger or more ambitious they could try, a related concept that goes deeper, or a next-level technique that builds on what you just explained. make it something worth coming back for, not a question they'd just nod to. it's okay to not end with anything extra if the answer is complete on its own.
-    - if you receive multiple screen images, the one labeled "primary focus" is where the cursor is — prioritize that one but reference others if relevant.
 
     element pointing:
     you have a small blue triangle cursor that can fly to and point at things on screen. use it whenever pointing would genuinely help the user — if they're asking how to do something, looking for a menu, trying to find a button, or need help navigating an app, point at the relevant element. err on the side of pointing rather than not pointing, because it makes your help way more useful and concrete.
@@ -413,7 +462,7 @@ final class CompanionManager: ObservableObject {
 
     when you point, append a coordinate tag at the very end of your response, AFTER your spoken text. the screenshot images are labeled with their pixel dimensions. use those dimensions as the coordinate space. the origin (0,0) is the top-left corner of the image. x increases rightward, y increases downward.
 
-    format: [POINT:x,y:label] where x,y are integer pixel coordinates in the screenshot's coordinate space, and label is a short 1-3 word description of the element (like "search bar" or "save button"). if the element is on the cursor's screen you can omit the screen number. if the element is on a DIFFERENT screen, append :screenN where N is the screen number from the image label (e.g. :screen2). this is important — without the screen number, the cursor will point at the wrong place.
+    format: [POINT:x,y:label] where x,y are integer pixel coordinates in the screenshot's coordinate space, and label is a short 1-3 word description of the element (like "search bar" or "save button").
 
     if pointing wouldn't help, append [POINT:none].
 
@@ -421,7 +470,6 @@ final class CompanionManager: ObservableObject {
     - user asks how to color grade in final cut: "you'll want to open the color inspector — it's right up in the top right area of the toolbar. click that and you'll get all the color wheels and curves. [POINT:1100,42:color inspector]"
     - user asks what html is: "html stands for hypertext markup language, it's basically the skeleton of every web page. curious how it connects to the css you're looking at? [POINT:none]"
     - user asks how to commit in xcode: "see that source control menu up top? click that and hit commit, or you can use command option c as a shortcut. [POINT:285,11:source control]"
-    - element is on screen 2 (not where cursor is): "that's over on your other monitor — see the terminal window? [POINT:400,300:terminal:screen2]"
     """
 
     // MARK: - AI Response Pipeline
@@ -440,18 +488,18 @@ final class CompanionManager: ObservableObject {
             voiceState = .processing
 
             do {
-                // Capture all connected screens so the AI has full context
-                let screenCaptures = try await CompanionScreenCaptureUtility.captureAllScreensAsJPEG()
+                // Capture only the picked trading window (never the full screen)
+                let windowCapture = try await CompanionScreenCaptureUtility.capturePickedWindowAsJPEG(
+                    pickedSelection: pickedTradingWindow
+                )
 
                 guard !Task.isCancelled else { return }
 
                 // Build image labels with the actual screenshot pixel dimensions
                 // so the AI's coordinate space matches the image it sees. We
-                // scale from screenshot pixels to display points ourselves.
-                let labeledImages = screenCaptures.map { capture in
-                    let dimensionInfo = " (image dimensions: \(capture.screenshotWidthInPixels)x\(capture.screenshotHeightInPixels) pixels)"
-                    return (data: capture.imageData, label: capture.label + dimensionInfo)
-                }
+                // scale from screenshot pixels to window points ourselves.
+                let dimensionInfo = " (image dimensions: \(windowCapture.screenshotWidthInPixels)x\(windowCapture.screenshotHeightInPixels) pixels)"
+                let labeledImages = [(data: windowCapture.imageData, label: windowCapture.label + dimensionInfo)]
 
                 // Pass conversation history so the AI remembers prior exchanges
                 let historyForAPI = conversationHistory.map { entry in
@@ -480,46 +528,20 @@ final class CompanionManager: ObservableObject {
                     voiceState = .idle
                 }
 
-                // Pick the screen capture matching the AI's screen number,
-                // falling back to the cursor screen if not specified.
-                let targetScreenCapture: CompanionScreenCapture? = {
-                    if let screenNumber = parseResult.screenNumber,
-                       screenNumber >= 1 && screenNumber <= screenCaptures.count {
-                        return screenCaptures[screenNumber - 1]
-                    }
-                    return screenCaptures.first(where: { $0.isCursorScreen })
-                }()
-
-                if let pointCoordinate = parseResult.coordinate,
-                   let targetScreenCapture {
-                    // the AI's coordinates are in the screenshot's pixel space
-                    // (top-left origin, e.g. 1280x831). Scale to the display's
-                    // point space (e.g. 1512x982), then convert to AppKit global coords.
-                    let screenshotWidth = CGFloat(targetScreenCapture.screenshotWidthInPixels)
-                    let screenshotHeight = CGFloat(targetScreenCapture.screenshotHeightInPixels)
-                    let displayWidth = CGFloat(targetScreenCapture.displayWidthInPoints)
-                    let displayHeight = CGFloat(targetScreenCapture.displayHeightInPoints)
-                    let displayFrame = targetScreenCapture.displayFrame
-
-                    // Clamp to screenshot coordinate space
-                    let clampedX = max(0, min(pointCoordinate.x, screenshotWidth))
-                    let clampedY = max(0, min(pointCoordinate.y, screenshotHeight))
-
-                    // Scale from screenshot pixels to display points
-                    let displayLocalX = clampedX * (displayWidth / screenshotWidth)
-                    let displayLocalY = clampedY * (displayHeight / screenshotHeight)
-
-                    // Convert from top-left origin (screenshot) to bottom-left origin (AppKit)
-                    let appKitY = displayHeight - displayLocalY
-
-                    // Convert display-local coords to global screen coords
-                    let globalLocation = CGPoint(
-                        x: displayLocalX + displayFrame.origin.x,
-                        y: appKitY + displayFrame.origin.y
+                if let pointCoordinate = parseResult.coordinate {
+                    // The AI's coordinates are in the window screenshot's pixel
+                    // space (top-left origin). Map them onto the picked window.
+                    let globalLocation = TradingWindowCoordinateMapping.appKitGlobalPoint(
+                        fromScreenshotPoint: pointCoordinate,
+                        screenshotSizeInPixels: CGSize(
+                            width: windowCapture.screenshotWidthInPixels,
+                            height: windowCapture.screenshotHeightInPixels
+                        ),
+                        windowFrameInAppKitCoordinates: windowCapture.windowFrame
                     )
 
                     detectedElementScreenLocation = globalLocation
-                    detectedElementDisplayFrame = displayFrame
+                    detectedElementDisplayFrame = windowCapture.windowFrame
                     print("🎯 Element pointing: (\(Int(pointCoordinate.x)), \(Int(pointCoordinate.y))) → \"\(parseResult.elementLabel ?? "element")\"")
                 } else {
                     print("🎯 Element pointing: \(parseResult.elementLabel ?? "no element")")
