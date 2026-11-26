@@ -11,10 +11,10 @@
 	<key>VoiceTranscriptionProvider</key>
 	<string>assemblyai</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Clicky uses your microphone so you can talk to it</string>
+	<string>TomLens uses the microphone only while you hold the push-to-talk hotkey</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Clicky needs screen recording access to see your screen and help you.</string>
+	<string>TomLens views only the one trading window you pick so it can tutor you.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Clicky uses speech recognition to transcribe your voice when you talk to it</string>
+	<string>TomLens transcribes what you say while you hold the push-to-talk hotkey</string>
 </dict>
 </plist>

@@ -6,7 +6,7 @@
 //
 
 import Testing
-@testable import leanring_buddy
+@testable import TomLens
 
 struct leanring_buddyTests {
 

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Safety guard (rg checks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Run guard
+        run: ./scripts/guard.sh
+
+  build:
+    name: Build + test (unsigned .app)
+    needs: guard
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: |
+          newest_xcode=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $newest_xcode"
+          sudo xcode-select -s "$newest_xcode"
+          xcodebuild -version
+      - name: Unit tests
+        run: |
+          xcodebuild test \
+            -project leanring-buddy.xcodeproj \
+            -scheme TomLens \
+            -destination 'platform=macOS' \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tee test.log
+      - name: Build Release (ad-hoc signed, no Apple team)
+        run: |
+          xcodebuild build \
+            -project leanring-buddy.xcodeproj \
+            -scheme TomLens \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=
+      - name: Verify bundle
+        run: |
+          app="build/DerivedData/Build/Products/Release/TomLens.app"
+          codesign --verify --verbose "$app"
+          codesign --display --entitlements - "$app"
+          min_os=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")
+          echo "LSMinimumSystemVersion=$min_os"
+          python3 -c "import sys; v=tuple(int(p) for p in sys.argv[1].split('.')); sys.exit(0 if v >= (14,2) else 1)" "$min_os"
+          bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")
+          test "$bundle_id" = "com.razacodespython.tomlens"
+          ditto -c -k --keepParent "$app" TomLens-unsigned.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TomLens-unsigned-app
+          path: TomLens-unsigned.zip
+          if-no-files-found: error
