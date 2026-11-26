@@ -2,11 +2,10 @@
 //  TutorTriggerPolicy.swift
 //  leanring-buddy
 //
-//  Pure rules for when Tom speaks up: at the end of a push-to-talk
-//  utterance, at each clock-aligned 3-minute bar close, and when the chart
-//  changes sharply (a ~1 fps local frame difference on a tiny grayscale
-//  thumbnail; frames never leave the Mac for this). Also holds the last few
-//  frames to send with a call.
+//  Pure rules for when Tom speaks up. Speech is a push-to-talk utterance.
+//  Clock-aligned 3-minute bar closes and sharp chart changes are still
+//  described here, but automatic model calls for them are off, so they never
+//  speak. Also holds the last few frames to send with a push-to-talk call.
 //
 
 import Foundation
@@ -60,16 +59,18 @@ nonisolated enum TutorTriggerPolicy {
     }
 
     /// Whether an automatic (non push-to-talk) call may go out now.
+    ///
+    /// Always false. Bar-close and sharp-change turns must not call the model
+    /// or speak. Push-to-talk and Ask Tom / session-end reviews do not use
+    /// this gate. The arguments stay so CompanionManager still asks the policy
+    /// before any automatic turn.
     static func shouldSendAutomaticTrigger(
         isSwitchedOn: Bool,
         isUserSpeakingOrWaiting: Bool,
         isPlanUsagePaused: Bool,
         remainingCallsThisHour: Int
     ) -> Bool {
-        isSwitchedOn
-            && !isUserSpeakingOrWaiting
-            && !isPlanUsagePaused
-            && remainingCallsThisHour > callsReservedForPushToTalk
+        false
     }
 }
 

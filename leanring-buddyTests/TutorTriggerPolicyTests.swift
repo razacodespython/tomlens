@@ -23,12 +23,24 @@ struct TutorTriggerPolicyTests {
         #expect(TutorTriggerPolicy.nextBarCloseDate(after: next).timeIntervalSince(next) == 180)
     }
 
-    @Test func automaticTriggersRespectSwitchSpeechPauseAndReserve() {
-        #expect(TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: false, isPlanUsagePaused: false, remainingCallsThisHour: 30))
+    @Test func automaticBarCloseAndSharpChangeSendsStayOff() {
+        // The old gate allowed a send when the switch was on, nobody was talking,
+        // plan usage was not paused, and more than the push-to-talk reserve remained.
+        // That combination must still refuse: a 3-minute bar close and a sharp
+        // chart change do not call the model or speak.
+        #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: false, isPlanUsagePaused: false, remainingCallsThisHour: 30))
+        #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: false, isPlanUsagePaused: false, remainingCallsThisHour: 40))
         #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: false, isUserSpeakingOrWaiting: false, isPlanUsagePaused: false, remainingCallsThisHour: 30))
         #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: true, isPlanUsagePaused: false, remainingCallsThisHour: 30))
         #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: false, isPlanUsagePaused: true, remainingCallsThisHour: 30))
         #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: false, isPlanUsagePaused: false, remainingCallsThisHour: 10))
+        #expect(!TutorTriggerPolicy.shouldSendAutomaticTrigger(isSwitchedOn: true, isUserSpeakingOrWaiting: false, isPlanUsagePaused: false, remainingCallsThisHour: TutorTriggerPolicy.callsReservedForPushToTalk + 1))
+
+        #expect(TutorTrigger.barClose(closedAt: Date(timeIntervalSince1970: 0)).isAutomatic)
+        #expect(TutorTrigger.sharpChange(score: SharpChangeDetector.defaultThreshold).isAutomatic)
+        #expect(SharpChangeDetector.defaultThreshold == 0.06)
+        #expect(SharpChangeDetector.defaultCooldownSeconds == 60)
+        #expect(!TutorTrigger.pushToTalk(transcript: "is this a fork").isAutomatic)
     }
 
     @Test func frameDifferenceIsNormalizedAndSafe() {
