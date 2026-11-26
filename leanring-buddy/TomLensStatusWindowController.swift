@@ -101,7 +101,7 @@ struct TomLensStatusView: View {
             }
             Text(TomLensStatusPresentation.switchedOffHint)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -118,7 +118,7 @@ struct TomLensStatusView: View {
             if let lastErrorMessage = chatGPTSignInService.lastErrorMessage {
                 Text(lastErrorMessage)
                     .font(.callout)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.orange)
             }
             HStack {
                 if chatGPTSignInService.isSignedIn {
@@ -158,7 +158,7 @@ struct TomLensStatusView: View {
             if let pickedTradingWindowWarning = companionManager.pickedTradingWindowWarning {
                 Text(pickedTradingWindowWarning)
                     .font(.callout)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -222,7 +222,7 @@ struct TomLensStatusView: View {
                 registrationFailureMessage: companionManager.pushToTalkRegistrationFailureMessage
             ))
             .font(.body)
-            .foregroundStyle(companionManager.pushToTalkRegistrationFailureMessage == nil ? .primary : .orange)
+            .foregroundStyle(companionManager.pushToTalkRegistrationFailureMessage == nil ? Color.primary : Color.orange)
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -258,7 +258,7 @@ struct TomLensStatusView: View {
                 hourlyCap: CompanionBrain.callRateLimiter.maximumCallsPerWindow
             ))
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.secondary)
         }
     }
 
