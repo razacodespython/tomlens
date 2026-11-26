@@ -749,7 +749,7 @@ private struct TomFaceView: View {
         let span = diameter * CGFloat(TomFaceGeometry.seamHalfSpanFraction)
         let midY = diameter * CGFloat(TomFaceGeometry.seamCenterYFraction)
         let lift = diameter * CGFloat(TomFaceGeometry.seamLiftFraction)
-        Path { path in
+        return Path { path in
             path.move(to: CGPoint(x: -span, y: midY - lift))
             path.addQuadCurve(
                 to: CGPoint(x: span, y: midY - lift),
