@@ -1,26 +1,82 @@
 #!/usr/bin/env swift
-// Renders Tom's face into leanring-buddy/Assets.xcassets/AppIcon.appiconset.
+// Renders the TomLens app icon into leanring-buddy/Assets.xcassets/AppIcon.appiconset.
 // Run from the repo root: swift scripts/render-icon.swift
 //
-// The face matches TomFaceGeometry: a flat #5AC078 circle, two near-black
-// vertical pills slightly below center, on a #1C1C1E rounded-square tile.
+// Original glossy green ball: equator seam, LED slits on the upper half,
+// a mouth slit, and side panels. Same fractions as TomFaceGeometry.
 // This file is the generator. Do not hand-edit the PNGs.
 
 import Foundation
 
+struct TomIconColor {
+    var r, g, b, a: Double
+
+    static func rgb(_ r: Double, _ g: Double, _ b: Double, _ a: Double = 1) -> TomIconColor {
+        TomIconColor(r: r, g: g, b: b, a: a)
+    }
+
+    func mixed(toward other: TomIconColor, _ t: Double) -> TomIconColor {
+        TomIconColor(
+            r: r + (other.r - r) * t,
+            g: g + (other.g - g) * t,
+            b: b + (other.b - b) * t,
+            a: a + (other.a - a) * t
+        )
+    }
+
+    var bytes: (UInt8, UInt8, UInt8, UInt8) {
+        func byte(_ value: Double) -> UInt8 {
+            UInt8(min(255, max(0, (value * 255).rounded())))
+        }
+        return (byte(r), byte(g), byte(b), byte(a))
+    }
+}
+
+struct TomIconPose {
+    var tiltDegrees = 0.0
+    var eyeOffsetX = 0.0
+    var eyeOffsetY = 0.0
+    var scaleX = 1.0
+    var scaleY = 1.0
+    var eyeScaleX = 1.0
+    var eyeScaleY = 1.0
+    var verticalPoints = 0.0
+    var pulseScale = 1.0
+    var showsPulse = false
+    var earFlapDegrees = 22.0
+
+    static let appIcon = TomIconPose(earFlapDegrees: 22)
+}
+
 enum TomIconPixels {
-    static let green = (UInt8(90), UInt8(192), UInt8(120), UInt8(255))
-    static let eye = (UInt8(14), UInt8(14), UInt8(14), UInt8(255))
-    static let tile = (UInt8(28), UInt8(28), UInt8(30), UInt8(255))
+    // Keep these aligned with TomFaceGeometry.
+    static let green = TomIconColor.rgb(90.0 / 255.0, 192.0 / 255.0, 120.0 / 255.0)
+    static let highlight = TomIconColor.rgb(0.78, 0.96, 0.84)
+    static let shade = TomIconColor.rgb(0.13, 0.40, 0.24)
+    static let led = TomIconColor.rgb(244.0 / 255.0, 1, 232.0 / 255.0)
+    static let glow = TomIconColor.rgb(198.0 / 255.0, 1, 140.0 / 255.0)
+    static let ear = TomIconColor.rgb(36.0 / 255.0, 122.0 / 255.0, 68.0 / 255.0)
+    static let seam = TomIconColor.rgb(24.0 / 255.0, 92.0 / 255.0, 52.0 / 255.0)
+    static let tile = TomIconColor.rgb(28.0 / 255.0, 28.0 / 255.0, 30.0 / 255.0)
+    static let eyeCenterYFraction = -0.17
+    static let eyeSpacingFraction = 0.08
+    static let eyeWidthFraction = 0.20
+    static let eyeHeightFraction = 0.11
+    static let mouthWidthFraction = 0.22
+    static let mouthHeightFraction = 0.06
+    static let mouthCenterYFraction = 0.16
+    static let seamThicknessFraction = 0.05
+    static let earWidthFraction = 0.15
+    static let earHeightFraction = 0.34
     static let sizes = [16, 32, 64, 128, 256, 512, 1024]
 
-    static func render(size: Int) -> [UInt8] {
+    static func render(size: Int, pose: TomIconPose = .appIcon, background: TomIconColor? = nil) -> [UInt8] {
         let samples = 4
         let big = size * samples
         var accum = [UInt32](repeating: 0, count: size * size * 4)
         for y in 0..<big {
             for x in 0..<big {
-                let pixel = sample(x: x, y: y, big: big)
+                let pixel = sample(x: x, y: y, big: big, pose: pose, background: background).bytes
                 let dx = x / samples
                 let dy = y / samples
                 let index = (dy * size + dx) * 4
@@ -34,63 +90,200 @@ enum TomIconPixels {
         return accum.map { UInt8($0 / divisor) }
     }
 
-    static func sample(x: Int, y: Int, big: Int) -> (UInt8, UInt8, UInt8, UInt8) {
+    /// Monochrome ball for the menu bar. On is filled with knocked-out eyes.
+    /// Off is an outline, filled eyes, and a slash. No side panels: they
+    /// do not read at 18 pt.
+    static func renderMenuBar(size: Int, isOn: Bool) -> [UInt8] {
+        let samples = 4
+        let big = size * samples
+        var accum = [UInt32](repeating: 0, count: size * size * 4)
+        for y in 0..<big {
+            for x in 0..<big {
+                let pixel = menuBarSample(x: x, y: y, big: big, isOn: isOn).bytes
+                let dx = x / samples
+                let dy = y / samples
+                let index = (dy * size + dx) * 4
+                accum[index] += UInt32(pixel.0)
+                accum[index + 1] += UInt32(pixel.1)
+                accum[index + 2] += UInt32(pixel.2)
+                accum[index + 3] += UInt32(pixel.3)
+            }
+        }
+        let divisor = UInt32(samples * samples)
+        return accum.map { UInt8($0 / divisor) }
+    }
+
+    static func sample(x: Int, y: Int, big: Int, pose: TomIconPose, background: TomIconColor?) -> TomIconColor {
         let n = (Double(x) + 0.5) / Double(big)
         let m = (Double(y) + 0.5) / Double(big)
-        let radius = 0.223
-        if !insideRoundedSquare(n, m, radius: radius) {
-            return (0, 0, 0, 0)
-        }
-        let faceCenter = 0.50
-        let faceRadius = 0.30
-        let shadowDy = 0.035
-        let shadowDistance = hypot(n - faceCenter, m - faceCenter - shadowDy)
-        var red = tile.0
-        var greenChannel = tile.1
-        var blue = tile.2
-        if shadowDistance < faceRadius + 0.04 {
-            let shade = max(0, 1 - (shadowDistance - faceRadius) / 0.04)
-            red = UInt8(Double(red) * (1 - 0.45 * shade))
-            greenChannel = UInt8(Double(greenChannel) * (1 - 0.45 * shade))
-            blue = UInt8(Double(blue) * (1 - 0.45 * shade))
-        }
-        let faceDistance = hypot(n - faceCenter, m - faceCenter)
-        if faceDistance <= faceRadius {
-            if insideEye(n, m, faceCenter: faceCenter, faceRadius: faceRadius) {
-                return eye
+        let clear = TomIconColor.rgb(0, 0, 0, 0)
+        var color = background ?? clear
+        if background == nil {
+            if !insideRoundedSquare(n, m, radius: 0.223) {
+                return clear
             }
-            return green
+            color = tile
+            let shadowDistance = hypot(n - 0.50, m - 0.50 - 0.03)
+            if shadowDistance < 0.34 {
+                let shadeAmount = max(0, 1 - (shadowDistance - 0.28) / 0.06)
+                color = color.mixed(toward: TomIconColor.rgb(0, 0, 0), min(0.45, shadeAmount))
+            }
         }
-        return (red, greenChannel, blue, 255)
+
+        let faceDiameter = background == nil ? 0.56 : 0.62
+        let centerX = 0.50
+        let centerY = 0.50 + (pose.verticalPoints / 30.0) * faceDiameter
+        let dx = n - centerX
+        let dy = m - centerY
+        let radians = -pose.tiltDegrees * .pi / 180
+        let cosine = cos(radians)
+        let sine = sin(radians)
+        let rotatedX = dx * cosine - dy * sine
+        let rotatedY = dx * sine + dy * cosine
+        let sx = rotatedX / max(pose.scaleX, 0.2) / faceDiameter
+        let sy = rotatedY / max(pose.scaleY, 0.2) / faceDiameter
+
+        if pose.showsPulse {
+            let ring = hypot(sx, sy)
+            let radius = 0.50 * pose.pulseScale
+            if abs(ring - radius) < 0.035 && ring > 0.50 {
+                color = color.mixed(toward: green, 0.55)
+            }
+        }
+
+        if insideEar(sx, sy, side: -1, degrees: pose.earFlapDegrees) || insideEar(sx, sy, side: 1, degrees: pose.earFlapDegrees) {
+            color = ear
+        }
+
+        let distance = hypot(sx, sy)
+        if distance <= 0.50 {
+            color = ballColor(sx: sx, sy: sy)
+            if abs(sy) <= seamThicknessFraction / 2 && distance < 0.47 {
+                color = seam
+            }
+            if insidePill(
+                sx, sy,
+                cx: 0,
+                cy: mouthCenterYFraction,
+                w: mouthWidthFraction,
+                h: mouthHeightFraction
+            ) {
+                color = seam
+            }
+            color = paintEye(sx, sy, pose: pose, on: color)
+        }
+        return color
+    }
+
+    static func ballColor(sx: Double, sy: Double) -> TomIconColor {
+        let light = max(0, 1 - hypot(sx + 0.15, sy + 0.17) / 0.52)
+        let lower = max(0, sy / 0.50)
+        var color = green.mixed(toward: highlight, light * 0.82)
+        color = color.mixed(toward: shade, lower * 0.5)
+        let specular = hypot((sx + 0.13) / 0.10, (sy + 0.16) / 0.065)
+        if specular < 1 {
+            color = color.mixed(toward: TomIconColor.rgb(1, 1, 1), (1 - specular) * 0.7)
+        }
+        return color
+    }
+
+    static func paintEye(_ sx: Double, _ sy: Double, pose: TomIconPose, on color: TomIconColor) -> TomIconColor {
+        let halfSpan = (eyeWidthFraction + eyeSpacingFraction) / 2
+        var painted = color
+        for side in [-1.0, 1.0] {
+            let cx = side * halfSpan + pose.eyeOffsetX * 0.08
+            let cy = eyeCenterYFraction + pose.eyeOffsetY * 0.08
+            let coreW = eyeWidthFraction * pose.eyeScaleX
+            let coreH = eyeHeightFraction * pose.eyeScaleY
+            if insidePill(sx, sy, cx: cx, cy: cy, w: coreW * 1.18, h: max(coreH * 1.65, 0.02)) {
+                painted = glow
+            }
+            if insidePill(sx, sy, cx: cx, cy: cy, w: coreW, h: max(coreH, 0.012)) {
+                painted = led
+            }
+        }
+        return painted
+    }
+
+    static func insideEar(_ sx: Double, _ sy: Double, side: Double, degrees: Double) -> Bool {
+        let pivotX = side * 0.50
+        let dx = sx - pivotX
+        let dy = sy
+        let radians = side * degrees * .pi / 180
+        let cosine = cos(-radians)
+        let sine = sin(-radians)
+        let localX = dx * cosine - dy * sine
+        let localY = dx * sine + dy * cosine
+        let outward = side * localX
+        if outward < -0.03 || outward > earWidthFraction { return false }
+        if abs(localY) > earHeightFraction / 2 { return false }
+        let cap = earHeightFraction / 2
+        let capStart = earWidthFraction - cap
+        if outward > capStart {
+            let ox = outward - capStart
+            if ox * ox + localY * localY > cap * cap { return false }
+        }
+        return true
     }
 
     static func insideRoundedSquare(_ x: Double, _ y: Double, radius: Double) -> Bool {
-        let inset = radius
-        let dx = max(abs(x - 0.5) - (0.5 - inset), 0)
-        let dy = max(abs(y - 0.5) - (0.5 - inset), 0)
-        return dx * dx + dy * dy <= inset * inset
+        let dx = max(abs(x - 0.5) - (0.5 - radius), 0)
+        let dy = max(abs(y - 0.5) - (0.5 - radius), 0)
+        return dx * dx + dy * dy <= radius * radius
     }
 
-    static func insideEye(_ x: Double, _ y: Double, faceCenter: Double, faceRadius: Double) -> Bool {
-        let eyeWidth = faceRadius * 0.16
-        let eyeHeight = faceRadius * 0.34
-        let spacing = faceRadius * 0.34
-        let eyeCenterY = faceCenter + faceRadius * 0.10
+    static func insidePill(_ x: Double, _ y: Double, cx: Double, cy: Double, w: Double, h: Double) -> Bool {
+        let dx = abs(x - cx)
+        let dy = abs(y - cy)
+        let radius = min(w, h) / 2
+        if dx > w / 2 || dy > h / 2 { return false }
+        let px = max(dx - (w / 2 - radius), 0)
+        let py = max(dy - (h / 2 - radius), 0)
+        return px * px + py * py <= radius * radius
+    }
+
+    static func menuBarSample(x: Int, y: Int, big: Int, isOn: Bool) -> TomIconColor {
+        let n = (Double(x) + 0.5) / Double(big)
+        let m = (Double(y) + 0.5) / Double(big)
+        let clear = TomIconColor.rgb(0, 0, 0, 0)
+        let black = TomIconColor.rgb(0, 0, 0, 1)
+        let diameter = 0.86
+        let cx = 0.5
+        let cy = 0.5
+        let sx = (n - cx) / diameter
+        let sy = (m - cy) / diameter
+        let distance = hypot(sx, sy)
+        let strokeHalf = (1.4 / 2) / (18.0 * 0.86)
+        let eye = menuBarEye(sx, sy)
+        if isOn {
+            if distance <= 0.50 {
+                return eye ? clear : black
+            }
+            return clear
+        }
+        let slashInset = 2.0 / 18.0
+        let slashHalf = (1.4 / 2) / 18.0
+        let slash = abs((n - slashInset) - (m - slashInset)) < slashHalf && n > slashInset && n < 1 - slashInset
+        if eye && distance < 0.52 {
+            return black
+        }
+        if abs(distance - 0.50) < strokeHalf {
+            return black
+        }
+        if slash {
+            return black
+        }
+        return clear
+    }
+
+    static func menuBarEye(_ sx: Double, _ sy: Double) -> Bool {
+        let halfSpan = (eyeWidthFraction + eyeSpacingFraction) / 2
         for side in [-1.0, 1.0] {
-            let eyeCenterX = faceCenter + side * spacing
-            if insidePill(x, y, cx: eyeCenterX, cy: eyeCenterY, width: eyeWidth, height: eyeHeight) {
+            if insidePill(sx, sy, cx: side * halfSpan, cy: eyeCenterYFraction, w: eyeWidthFraction, h: eyeHeightFraction) {
                 return true
             }
         }
         return false
-    }
-
-    static func insidePill(_ x: Double, _ y: Double, cx: Double, cy: Double, width: Double, height: Double) -> Bool {
-        let capsuleRadius = width / 2
-        let dx = max(abs(x - cx) - 0, 0)
-        let dy = max(abs(y - cy) - (height / 2 - capsuleRadius), 0)
-        if abs(x - cx) > width / 2 { return false }
-        return dx * dx + dy * dy <= capsuleRadius * capsuleRadius || abs(y - cy) <= height / 2 - capsuleRadius
     }
 }
 
@@ -106,14 +299,13 @@ func crc32(_ data: Data) -> UInt32 {
 }
 
 func zlibStore(_ raw: Data) -> Data {
-    var adler: UInt32 = 1
     var s1: UInt32 = 1
     var s2: UInt32 = 0
     for byte in raw {
         s1 = (s1 + UInt32(byte)) % 65521
         s2 = (s2 + s1) % 65521
     }
-    adler = (s2 << 16) | s1
+    let adler = (s2 << 16) | s1
     var output = Data([0x78, 0x01])
     var offset = 0
     let bytes = [UInt8](raw)
@@ -165,6 +357,14 @@ func pngData(width: Int, height: Int, rgba: [UInt8]) -> Data {
     return png
 }
 
+#if RENDER_MOTION
+do {
+    try renderMotionProof()
+} catch {
+    fputs("motion render failed: \(error)\n", stderr)
+    exit(1)
+}
+#else
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let iconDirectory = root.appendingPathComponent("leanring-buddy/Assets.xcassets/AppIcon.appiconset")
 for size in TomIconPixels.sizes {
@@ -173,3 +373,4 @@ for size in TomIconPixels.sizes {
     try pngData(width: size, height: size, rgba: pixels).write(to: url)
     print("wrote \(url.lastPathComponent)")
 }
+#endif

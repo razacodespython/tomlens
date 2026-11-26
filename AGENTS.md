@@ -44,7 +44,7 @@ Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, cons
 - **M8** `SessionJournal`: `~/TomLens/journal/<yyyyMMdd-HHmmss>/` frames, `transcript.jsonl`, `model.jsonl` (images replaced by file names; no credentials).
 - Pure files are `nonisolated` (the app target defaults to MainActor) and listed in `scripts/run-pure-swift-tests.sh`.
 - **M9** macOS CI builds and tests an ad-hoc-signed `TomLens.app` and uploads `TomLens-unsigned-app`. `INSTALL.md` is the unsigned-app install runbook.
-- **0.1.2** Hotkey is Control+Option+Z (the space combo was already taken). TomLens still launches off. The status window asks for Screen Recording, Microphone, and Speech Recognition with Allow while the prompt is undecided, and opens Settings only after a denial. CI ad-hoc signs with an identifier designated requirement so those grants survive the next unsigned update.
+- **0.1.2** Hotkey is Control+Option+Z (the space combo was already taken). TomLens still launches off. The status window asks for Screen Recording, Microphone, and Speech Recognition with Allow while the prompt is undecided, and opens Settings only after a denial. CI ad-hoc signs with an identifier designated requirement so those grants survive the next unsigned update. The mascot is a glossy green ball with an equator, LED slits, a mouth slit, and side panels.
 
 ## Engineering rules
 

@@ -93,8 +93,9 @@ final class MenuBarPanelManager: NSObject {
             : "TomLens is off. \(TomLensStatusPresentation.switchedOffHint)"
     }
 
-    /// Template image of Tom's face. Filled when on, outlined with a slash
+    /// Template image of the ball. Filled when on, outlined with a slash
     /// when off, so the menu bar shows which state the hotkey is in.
+    /// Eyes only: side panels disappear at 18 pt.
     private func makeTomLensMenuBarIcon(isTomLensSwitchedOn: Bool) -> NSImage {
         let iconSize: CGFloat = 18
         let image = NSImage(size: NSSize(width: iconSize, height: iconSize), flipped: false) { rect in
@@ -125,17 +126,20 @@ final class MenuBarPanelManager: NSObject {
         return image
     }
 
-    /// Two vertical pills, slightly below the face center. Knocked-out eyes
-    /// read correctly in a menu-bar template image.
+    /// Two LED slits on the upper half. Knocked-out eyes read correctly
+    /// in a menu-bar template image.
     private static func drawMenuBarEyes(in faceRect: NSRect, knockedOut: Bool) {
         let eyeWidth = faceRect.width * CGFloat(TomFaceGeometry.eyeWidthFraction)
         let eyeHeight = faceRect.height * CGFloat(TomFaceGeometry.eyeHeightFraction)
+        let gap = faceRect.width * CGFloat(TomFaceGeometry.eyeSpacingFraction)
+        let halfSpan = (eyeWidth + gap) / 2
         let eyeY = faceRect.midY - eyeHeight / 2 - faceRect.height * CGFloat(TomFaceGeometry.eyeCenterYFraction)
-        let spacing = faceRect.width * CGFloat(TomFaceGeometry.eyeSpacingFraction)
-        let leftX = faceRect.midX - spacing / 2 - eyeWidth
-        let rightX = faceRect.midX + spacing / 2
-        for eyeX in [leftX, rightX] {
-            let eye = NSBezierPath(roundedRect: NSRect(x: eyeX, y: eyeY, width: eyeWidth, height: eyeHeight), xRadius: eyeWidth / 2, yRadius: eyeWidth / 2)
+        for centerX in [faceRect.midX - halfSpan, faceRect.midX + halfSpan] {
+            let eye = NSBezierPath(
+                roundedRect: NSRect(x: centerX - eyeWidth / 2, y: eyeY, width: eyeWidth, height: eyeHeight),
+                xRadius: eyeHeight / 2,
+                yRadius: eyeHeight / 2
+            )
             if knockedOut {
                 NSGraphicsContext.saveGraphicsState()
                 NSGraphicsContext.current?.compositingOperation = .destinationOut
