@@ -228,7 +228,7 @@ if unexpected:
 print(f"ok    hardcoded hosts are on the allowlist ({sorted(found_hosts)})")
 PY_HOSTS
 
-echo "== 0.1.7: in-app update replaces Applications only =="
+echo "== 0.1.8: in-app update replaces Applications only =="
 require "menu offers Update TomLens" 'Update TomLens…' leanring-buddy/TomLensUpdatePolicy.swift
 require "panel shows the update section" 'TomLensUpdateSection' leanring-buddy/CompanionPanelView.swift
 require "status window shows the update section" 'TomLensUpdateSection' leanring-buddy/TomLensStatusWindowController.swift
