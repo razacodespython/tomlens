@@ -69,6 +69,8 @@ final class CompanionManager: ObservableObject {
     private var audioPowerCancellable: AnyCancellable?
     private var permissionCheckTimer: Timer?
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
+    /// Short-lived click-through drawings over the picked window.
+    private let drawingOverlayController = TradingWindowDrawingOverlayController()
     /// When the current push-to-talk hold began, for the accidental-tap check.
     private var pushToTalkPressedAt: Date?
     /// Force-stops the mic if a hold exceeds the maximum (e.g. a missed key-up).
@@ -196,6 +198,7 @@ final class CompanionManager: ObservableObject {
     }
 
     func clearDetectedElementLocation() {
+        drawingOverlayController.hide()
         detectedElementScreenLocation = nil
         detectedElementDisplayFrame = nil
         detectedElementBubbleText = nil
@@ -442,21 +445,10 @@ final class CompanionManager: ObservableObject {
     - focus on giving a thorough, useful explanation. don't end with simple yes/no questions like "want me to explain more?" or "should i show you?" — those are dead ends that force the user to just say yes.
     - instead, when it fits naturally, end by planting a seed — mention something bigger or more ambitious they could try, a related concept that goes deeper, or a next-level technique that builds on what you just explained. make it something worth coming back for, not a question they'd just nod to. it's okay to not end with anything extra if the answer is complete on its own.
 
-    element pointing:
-    you have a small blue triangle cursor that can fly to and point at things on screen. use it whenever pointing would genuinely help the user — if they're asking how to do something, looking for a menu, trying to find a button, or need help navigating an app, point at the relevant element. err on the side of pointing rather than not pointing, because it makes your help way more useful and concrete.
-
-    don't point at things when it would be pointless — like if the user asks a general knowledge question, or the conversation has nothing to do with what's on screen, or you'd just be pointing at something obvious they're already looking at. but if there's a specific UI element, menu, button, or area on screen that's relevant to what you're helping with, point at it.
-
-    when you point, append a coordinate tag at the very end of your response, AFTER your spoken text. the screenshot images are labeled with their pixel dimensions. use those dimensions as the coordinate space. the origin (0,0) is the top-left corner of the image. x increases rightward, y increases downward.
-
-    format: [POINT:x,y:label] where x,y are integer pixel coordinates in the screenshot's coordinate space, and label is a short 1-3 word description of the element (like "search bar" or "save button").
-
-    if pointing wouldn't help, append [POINT:none].
-
-    examples:
-    - user asks how to color grade in final cut: "you'll want to open the color inspector — it's right up in the top right area of the toolbar. click that and you'll get all the color wheels and curves. [POINT:1100,42:color inspector]"
-    - user asks what html is: "html stands for hypertext markup language, it's basically the skeleton of every web page. curious how it connects to the css you're looking at? [POINT:none]"
-    - user asks how to commit in xcode: "see that source control menu up top? click that and hit commit, or you can use command option c as a shortcut. [POINT:285,11:source control]"
+    drawing on the chart:
+    you can briefly draw on the trading window to show what you mean. coordinates are pixels in the screenshot (the image is labeled with its dimensions), origin top-left, x rightward, y downward. when a drawing helps, append it at the very end, after your spoken text, as:
+    <draw>[{"type":"level","y":312,"label":"vwap"},{"type":"circle","x":640,"y":300,"r":40,"label":"fork"},{"type":"arrow","from":[600,420],"to":[640,300]},{"type":"point","x":700,"y":280,"label":"entry"}]</draw>
+    shapes: point, arrow, circle, level (a full-width horizontal price line). at most three shapes. if nothing needs drawing, append <draw>[]</draw>. never draw on order buttons or suggest clicking anything.
     """
 
     // MARK: - AI Response Pipeline
@@ -464,8 +456,9 @@ final class CompanionManager: ObservableObject {
     /// Captures a screenshot, sends it along with the transcript to the AI brain,
     /// and plays the response aloud via Apple text-to-speech. The cursor stays in
     /// the spinner/processing state until TTS audio begins playing.
-    /// the AI's response may include a [POINT:x,y:label] tag which triggers
-    /// the buddy to fly to that element on screen.
+    /// the AI's response may end with a <draw>[...]</draw> tag: shapes are
+    /// drawn on a click-through overlay over the window and the first point
+    /// also drives the buddy cursor flight.
     private func sendTranscriptToBrainWithScreenshot(transcript: String) {
         currentResponseTask?.cancel()
         speechSynthesizerClient.stopPlayback()
@@ -504,36 +497,43 @@ final class CompanionManager: ObservableObject {
 
                 guard !Task.isCancelled else { return }
 
-                // Parse the [POINT:...] tag from the AI's response
-                let parseResult = Self.parsePointingCoordinates(from: fullResponseText)
-                let spokenText = parseResult.spokenText
+                // Split off the optional <draw> tag (screenshot pixel space)
+                let screenshotSize = CGSize(
+                    width: windowCapture.screenshotWidthInPixels,
+                    height: windowCapture.screenshotHeightInPixels
+                )
+                let (spokenText, drawing) = TutorDrawingParser.parse(
+                    responseText: fullResponseText,
+                    screenshotSizeInPixels: screenshotSize
+                )
+                drawingOverlayController.show(
+                    drawing,
+                    windowFrameInAppKitCoordinates: windowCapture.windowFrame,
+                    pickedSelection: pickedTradingWindow
+                )
 
                 // Handle element pointing if the AI returned coordinates.
                 // Switch to idle BEFORE setting the location so the triangle
                 // becomes visible and can fly to the target. Without this, the
                 // spinner hides the triangle and the flight animation is invisible.
-                let hasPointCoordinate = parseResult.coordinate != nil
-                if hasPointCoordinate {
+                if drawing.primaryPoint != nil {
                     voiceState = .idle
                 }
 
-                if let pointCoordinate = parseResult.coordinate {
+                if let pointCoordinate = drawing.primaryPoint {
                     // The AI's coordinates are in the window screenshot's pixel
                     // space (top-left origin). Map them onto the picked window.
                     let globalLocation = TradingWindowCoordinateMapping.appKitGlobalPoint(
                         fromScreenshotPoint: pointCoordinate,
-                        screenshotSizeInPixels: CGSize(
-                            width: windowCapture.screenshotWidthInPixels,
-                            height: windowCapture.screenshotHeightInPixels
-                        ),
+                        screenshotSizeInPixels: screenshotSize,
                         windowFrameInAppKitCoordinates: windowCapture.windowFrame
                     )
 
                     detectedElementScreenLocation = globalLocation
                     detectedElementDisplayFrame = windowCapture.windowFrame
-                    print("🎯 Element pointing: (\(Int(pointCoordinate.x)), \(Int(pointCoordinate.y))) → \"\(parseResult.elementLabel ?? "element")\"")
+                    print("🎯 Drawing \(drawing.shapes.count) shape(s), pointing at (\(Int(pointCoordinate.x)), \(Int(pointCoordinate.y)))")
                 } else {
-                    print("🎯 Element pointing: \(parseResult.elementLabel ?? "no element")")
+                    print("🎯 Drawing \(drawing.shapes.count) shape(s), no point")
                 }
 
                 // Save this exchange to conversation history (with the point tag
@@ -579,63 +579,6 @@ final class CompanionManager: ObservableObject {
         let utterance = (error as? LocalizedError)?.errorDescription ?? "Something went wrong reaching the AI."
         try? speechSynthesizerClient.speakText(utterance)
         voiceState = .responding
-    }
-
-    // MARK: - Point Tag Parsing
-
-    /// Result of parsing a [POINT:...] tag from the AI's response.
-    struct PointingParseResult {
-        /// The response text with the [POINT:...] tag removed — this is what gets spoken.
-        let spokenText: String
-        /// The parsed pixel coordinate, or nil if the AI said "none" or no tag was found.
-        let coordinate: CGPoint?
-        /// Short label describing the element (e.g. "run button"), or "none".
-        let elementLabel: String?
-        /// Which screen the coordinate refers to (1-based), or nil to default to cursor screen.
-        let screenNumber: Int?
-    }
-
-    /// Parses a [POINT:x,y:label:screenN] or [POINT:none] tag from the end of the AI's response.
-    /// Returns the spoken text (tag removed) and the optional coordinate + label + screen number.
-    static func parsePointingCoordinates(from responseText: String) -> PointingParseResult {
-        // Match [POINT:none] or [POINT:123,456:label] or [POINT:123,456:label:screen2]
-        let pattern = #"\[POINT:(?:none|(\d+)\s*,\s*(\d+)(?::([^\]:\s][^\]:]*?))?(?::screen(\d+))?)\]\s*$"#
-
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []),
-              let match = regex.firstMatch(in: responseText, range: NSRange(responseText.startIndex..., in: responseText)) else {
-            // No tag found at all
-            return PointingParseResult(spokenText: responseText, coordinate: nil, elementLabel: nil, screenNumber: nil)
-        }
-
-        // Remove the tag from the spoken text
-        let tagRange = Range(match.range, in: responseText)!
-        let spokenText = String(responseText[..<tagRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Check if it's [POINT:none]
-        guard match.numberOfRanges >= 3,
-              let xRange = Range(match.range(at: 1), in: responseText),
-              let yRange = Range(match.range(at: 2), in: responseText),
-              let x = Double(responseText[xRange]),
-              let y = Double(responseText[yRange]) else {
-            return PointingParseResult(spokenText: spokenText, coordinate: nil, elementLabel: "none", screenNumber: nil)
-        }
-
-        var elementLabel: String? = nil
-        if match.numberOfRanges >= 4, let labelRange = Range(match.range(at: 3), in: responseText) {
-            elementLabel = String(responseText[labelRange]).trimmingCharacters(in: .whitespaces)
-        }
-
-        var screenNumber: Int? = nil
-        if match.numberOfRanges >= 5, let screenRange = Range(match.range(at: 4), in: responseText) {
-            screenNumber = Int(responseText[screenRange])
-        }
-
-        return PointingParseResult(
-            spokenText: spokenText,
-            coordinate: CGPoint(x: x, y: y),
-            elementLabel: elementLabel,
-            screenNumber: screenNumber
-        )
     }
 
     func startOnboardingPromptStream() {

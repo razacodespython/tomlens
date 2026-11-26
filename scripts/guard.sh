@@ -130,6 +130,14 @@ forbid "no hardcoded API keys" 'sk-[A-Za-z0-9_-]{16,}'
 forbid "API-key fallback is never switched on by code" 'set\(true,\s*forKey:\s*(TomLensAPIKeyFallback|"TomLensAPIKeyFallbackEnabled")|register\(defaults:.*TomLensAPIKeyFallbackEnabled'
 forbid "never send unsupported sampling/limit fields" '"(temperature|top_p|max_output_tokens|previous_response_id)":'
 
+echo "== M6: draw-only, click-through overlay =="
+require "drawing overlay ignores mouse events" 'panel\.ignoresMouseEvents = true' leanring-buddy/TradingWindowDrawingOverlay.swift
+require "drawing overlay is excluded from capture" 'panel\.sharingType = \.none' leanring-buddy/TradingWindowDrawingOverlay.swift
+require "drawing overlay is short-lived" 'displayDurationSeconds' leanring-buddy/TradingWindowDrawingOverlay.swift
+require "drawing overlay follows the live SCWindow frame" 'fromScreenCaptureKitFrame: liveWindow\.frame' leanring-buddy/TradingWindowDrawingOverlay.swift
+forbid "no overlay ever takes mouse input" 'ignoresMouseEvents\s*=\s*false'
+forbid "no legacy [POINT] tag parsing" '\[POINT:'
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys

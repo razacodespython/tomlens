@@ -11,6 +11,7 @@ pure_sources=(
   leanring-buddy/PushToTalkUtterancePolicy.swift
   leanring-buddy/ChatGPTSignInProtocol.swift
   leanring-buddy/ResponsesAPIProtocol.swift
+  leanring-buddy/TutorDrawing.swift
 )
 pure_tests=(
   leanring-buddyTests/TradingWindowCapturePolicyTests.swift
@@ -18,6 +19,7 @@ pure_tests=(
   leanring-buddyTests/PushToTalkUtterancePolicyTests.swift
   leanring-buddyTests/ChatGPTSignInProtocolTests.swift
   leanring-buddyTests/ResponsesAPIProtocolTests.swift
+  leanring-buddyTests/TutorDrawingTests.swift
 )
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT

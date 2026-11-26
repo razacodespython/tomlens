@@ -32,4 +32,31 @@ nonisolated enum TradingWindowCoordinateMapping {
             y: appKitLocalY + windowFrame.origin.y
         )
     }
+
+    /// Maps a screenshot pixel point to window-local points with a top-left
+    /// origin (SwiftUI drawing space of an overlay sized to the window).
+    /// Recomputed on every draw, so a moved or resized window stays aligned.
+    static func windowLocalPoint(
+        fromScreenshotPoint screenshotPoint: CGPoint,
+        screenshotSizeInPixels: CGSize,
+        windowSizeInPoints: CGSize
+    ) -> CGPoint {
+        guard screenshotSizeInPixels.width > 0, screenshotSizeInPixels.height > 0 else { return .zero }
+        let clampedX = max(0, min(screenshotPoint.x, screenshotSizeInPixels.width))
+        let clampedY = max(0, min(screenshotPoint.y, screenshotSizeInPixels.height))
+        return CGPoint(
+            x: clampedX * windowSizeInPoints.width / screenshotSizeInPixels.width,
+            y: clampedY * windowSizeInPoints.height / screenshotSizeInPixels.height
+        )
+    }
+
+    /// Scales a screenshot pixel length (e.g. a circle radius) to window points.
+    static func windowLocalLength(
+        fromScreenshotLength screenshotLength: CGFloat,
+        screenshotSizeInPixels: CGSize,
+        windowSizeInPoints: CGSize
+    ) -> CGFloat {
+        guard screenshotSizeInPixels.width > 0 else { return 0 }
+        return screenshotLength * windowSizeInPoints.width / screenshotSizeInPixels.width
+    }
 }
