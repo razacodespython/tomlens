@@ -11,6 +11,8 @@
 
 import AppKit
 import Combine
+import CoreGraphics
+import ScreenCaptureKit
 import SwiftUI
 
 @MainActor

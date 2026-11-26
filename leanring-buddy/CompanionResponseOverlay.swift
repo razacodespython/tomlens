@@ -9,6 +9,8 @@
 
 import AppKit
 import Combine
+import CoreGraphics
+import Dispatch
 import SwiftUI
 
 // MARK: - View Model

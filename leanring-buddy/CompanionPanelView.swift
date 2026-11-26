@@ -9,6 +9,7 @@
 
 import AppKit
 import AVFoundation
+import Foundation
 import SwiftUI
 
 struct CompanionPanelView: View {

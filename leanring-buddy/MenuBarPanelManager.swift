@@ -13,6 +13,9 @@
 
 import AppKit
 import Combine
+import CoreGraphics
+import Dispatch
+import Foundation
 import SwiftUI
 
 extension Notification.Name {

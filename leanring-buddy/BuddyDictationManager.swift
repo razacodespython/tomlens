@@ -10,6 +10,8 @@
 import AppKit
 import AVFoundation
 import Combine
+import CoreGraphics
+import Dispatch
 import Foundation
 import Speech
 

@@ -8,6 +8,7 @@
 //
 
 import AppKit
+import Foundation
 import SwiftUI
 
 @main

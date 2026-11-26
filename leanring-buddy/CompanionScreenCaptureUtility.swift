@@ -9,6 +9,8 @@
 //
 
 import AppKit
+import CoreGraphics
+import Foundation
 import ScreenCaptureKit
 
 struct CompanionScreenCapture {

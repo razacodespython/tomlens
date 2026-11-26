@@ -13,6 +13,7 @@
 import AppKit
 import Combine
 import CryptoKit
+import Dispatch
 import Foundation
 import Network
 import Security
