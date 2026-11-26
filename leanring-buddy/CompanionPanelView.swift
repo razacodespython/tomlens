@@ -23,6 +23,28 @@ struct CompanionPanelView: View {
                 .background(DS.Colors.borderSubtle)
                 .padding(.horizontal, 16)
 
+            tomLensOnOffSwitchRow
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+
+            Text(panelHotkeyHint)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(companionManager.pushToTalkRegistrationFailureMessage == nil ? DS.Colors.textSecondary : DS.Colors.warning)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+                .padding(.horizontal, 16)
+
+            Button("Open TomLens") {
+                NotificationCenter.default.post(name: .tomLensShowStatusWindow, object: nil)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(DS.Colors.accent)
+            .pointerCursor()
+            .padding(.top, 6)
+            .padding(.horizontal, 16)
+
             permissionsCopySection
                 .padding(.top, 16)
                 .padding(.horizontal, 16)
@@ -51,14 +73,6 @@ struct CompanionPanelView: View {
                     .frame(height: 16)
 
                 startButton
-                    .padding(.horizontal, 16)
-            }
-
-            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-                Spacer()
-                    .frame(height: 16)
-
-                tomLensOnOffSwitchRow
                     .padding(.horizontal, 16)
             }
 
@@ -122,10 +136,8 @@ struct CompanionPanelView: View {
 
     @ViewBuilder
     private var permissionsCopySection: some View {
-        if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            Text(companionManager.isTomLensSwitchedOn
-                 ? "Hold \(BuddyPushToTalkShortcut.pushToTalkDisplayText) to talk."
-                 : "TomLens is off. Flip the switch below to start.")
+        if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted && companionManager.isTomLensSwitchedOn {
+            Text("Hold \(BuddyPushToTalkShortcut.pushToTalkDisplayText) to talk.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -528,6 +540,16 @@ struct CompanionPanelView: View {
 
     // MARK: - On/Off Switch
 
+    private var panelHotkeyHint: String {
+        if let registrationFailureMessage = companionManager.pushToTalkRegistrationFailureMessage {
+            return registrationFailureMessage
+        }
+        if companionManager.isTomLensSwitchedOn {
+            return "Hold \(BuddyPushToTalkShortcut.pushToTalkDisplayText) to talk."
+        }
+        return TomLensStatusPresentation.switchedOffHint
+    }
+
     /// The visible on/off switch. Off: no hot key, no mic, no capture, no AI.
     private var tomLensOnOffSwitchRow: some View {
         HStack {
@@ -551,7 +573,6 @@ struct CompanionPanelView: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .tint(DS.Colors.accent)
-            .scaleEffect(0.8)
             .pointerCursor()
         }
         .padding(.vertical, 4)

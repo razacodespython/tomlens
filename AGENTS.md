@@ -36,7 +36,7 @@ Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, cons
 
 ## Status (milestones)
 
-- **M0** rename, CI, guard. **M1** delete list. **M2** one-window capture (`TradingWindowCapturePolicy`, `CompanionScreenCaptureUtility`, panel window picker). **M3** Carbon hot key push-to-talk (`GlobalPushToTalkShortcutMonitor`, `BuddyPushToTalkShortcut`: ctrl + option + T), menu-bar on/off switch (`CompanionManager.isTomLensSwitchedOn`, launches off), entitlements trimmed.
+- **M0** rename, CI, guard. **M1** delete list. **M2** one-window capture (`TradingWindowCapturePolicy`, `CompanionScreenCaptureUtility`, panel window picker). **M3** Carbon hot key push-to-talk (`GlobalPushToTalkShortcutMonitor`, `BuddyPushToTalkShortcut`: ctrl + option + space), menu-bar on/off switch (`CompanionManager.isTomLensSwitchedOn`, launches off), entitlements trimmed.
 - **M4** `PushToTalkUtterancePolicy` (50 s mic cap, 0.3 s tap filter, noise transcripts dropped, speech cleanup); trading keyterms fed to Apple Speech.
 - **M5** Sign in with ChatGPT: `ChatGPTSignInProtocol` (pure PKCE/authorize/callback/token/ID-token logic), `ChatGPTSignInService` (browser + 127.0.0.1 loopback, Keychain, JWKS RS256 check, serialized refresh), `ResponsesAPIProtocol` (store:false + stream:true bodies, SSE parser, error classifier, `ModelCallRateLimiter` 40/hour). `CompanionBrain` never falls back to paid credits; usage-limit pauses. Own-API-key fallback (`TomLensAPIKeyFallback`) is off by default.
 - **M6** `TutorDrawing` (`<draw>[...]</draw>` point/arrow/circle/level in screenshot pixels) on `TradingWindowDrawingOverlayController` (click-through, capture-excluded, follows SCWindow.frame, 8 s).
@@ -44,6 +44,7 @@ Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, cons
 - **M8** `SessionJournal`: `~/TomLens/journal/<yyyyMMdd-HHmmss>/` frames, `transcript.jsonl`, `model.jsonl` (images replaced by file names; no credentials).
 - Pure files are `nonisolated` (the app target defaults to MainActor) and listed in `scripts/run-pure-swift-tests.sh`.
 - **M9** macOS CI builds and tests an ad-hoc-signed `TomLens.app` and uploads `TomLens-unsigned-app`. `INSTALL.md` is the unsigned-app install runbook.
+- **0.1.1** Hotkey is Control+Option+Space. TomLens still launches off; the menu bar and the normal status window (`TomLensStatusWindowController`, not click-through) say so. The status window shows the switch, ChatGPT, the picked window, the three permissions, hotkey errors, live state, the last exchange, a Test look, and the journal folder.
 
 ## Engineering rules
 

@@ -14,6 +14,7 @@ import CoreGraphics
 import Dispatch
 import Foundation
 import ScreenCaptureKit
+import Speech
 import SwiftUI
 
 enum CompanionVoiceState {
@@ -27,10 +28,14 @@ enum CompanionVoiceState {
 final class CompanionManager: ObservableObject {
     @Published private(set) var voiceState: CompanionVoiceState = .idle
     @Published private(set) var lastTranscript: String?
+    @Published private(set) var lastModelReply: String?
     @Published private(set) var currentAudioPowerLevel: CGFloat = 0
     @Published private(set) var hasScreenRecordingPermission = false
     @Published private(set) var hasMicrophonePermission = false
+    @Published private(set) var hasSpeechRecognitionPermission = false
     @Published private(set) var hasScreenContentPermission = false
+    /// Shown when Carbon refuses Control+Option+Space, usually because another app owns it.
+    @Published private(set) var pushToTalkRegistrationFailureMessage: String?
 
     /// Screen location (global AppKit coords) of a detected UI element the
     /// buddy should fly to and point at. Parsed from the AI's response;
@@ -143,14 +148,14 @@ final class CompanionManager: ObservableObject {
         isTomLensSwitchedOn = switchedOn
 
         if switchedOn {
-            globalPushToTalkShortcutMonitor.start()
+            registerPushToTalkHotKey()
             refreshPickableTradingWindows()
             startTutorEventMonitor()
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
         } else {
-            globalPushToTalkShortcutMonitor.stop()
+            unregisterPushToTalkHotKey()
             tutorEventMonitor.stop()
             sessionJournal = nil
             pendingKeyboardShortcutStartTask?.cancel()
@@ -182,8 +187,38 @@ final class CompanionManager: ObservableObject {
         bindVoiceStateObservation()
         bindAudioPowerLevel()
         bindShortcutTransitions()
+        refreshPickableTradingWindows()
         // TomLens launches switched off: the hot key is registered and the
         // overlay shown only after the user flips the menu-bar switch on.
+    }
+
+    /// Carbon RegisterEventHotKey. A non-nil failure means the combo is taken
+    /// or the handler could not be installed; the status window shows it.
+    private func registerPushToTalkHotKey() {
+        globalPushToTalkShortcutMonitor.start()
+        pushToTalkRegistrationFailureMessage = globalPushToTalkShortcutMonitor.registrationFailureMessage
+    }
+
+    private func unregisterPushToTalkHotKey() {
+        globalPushToTalkShortcutMonitor.stop()
+        pushToTalkRegistrationFailureMessage = nil
+    }
+
+    /// One "What do you see?" turn against the picked window. Counts toward
+    /// the hourly cap because it goes through the same tutor path as speech.
+    /// Turns the switch on first when it was off, so the capture is allowed.
+    func sendTestLookRequest() {
+        guard pickedTradingWindow != nil else { return }
+        if !isTomLensSwitchedOn {
+            setTomLensSwitchedOn(true)
+        }
+        runTutorTurn(.pushToTalk(transcript: TomLensStatusPresentation.testLookPrompt))
+    }
+
+    func openJournalFolder() {
+        let journalFolder = SessionJournal.defaultRootDirectory
+        try? FileManager.default.createDirectory(at: journalFolder, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(journalFolder)
     }
 
     /// Called by BlueCursorView after the buddy finishes its pointing
@@ -201,7 +236,7 @@ final class CompanionManager: ObservableObject {
         // Switch TomLens on and show the overlay for the first time —
         // isFirstAppearance triggers the welcome animation
         isTomLensSwitchedOn = true
-        globalPushToTalkShortcutMonitor.start()
+        registerPushToTalkHotKey()
         refreshPickableTradingWindows()
         startTutorEventMonitor()
         overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
@@ -230,7 +265,7 @@ final class CompanionManager: ObservableObject {
     }
 
     func stop() {
-        globalPushToTalkShortcutMonitor.stop()
+        unregisterPushToTalkHotKey()
         tutorEventMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
@@ -252,6 +287,7 @@ final class CompanionManager: ObservableObject {
 
         let micAuthStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         hasMicrophonePermission = micAuthStatus == .authorized
+        hasSpeechRecognitionPermission = SFSpeechRecognizer.authorizationStatus() == .authorized
 
         // Debug: log permission state on changes
         if previouslyHadScreenRecording != hasScreenRecordingPermission
@@ -572,10 +608,12 @@ final class CompanionManager: ObservableObject {
                 }
                 if parsedReply.isSilent {
                     print("🤫 Tom stayed silent (\(trigger.journalName))")
+                    lastModelReply = "Tom stayed quiet."
                     if !trigger.isAutomatic { voiceState = .idle }
                     return
                 }
                 let spokenText = TutorResponseSafetyFilter.filtered(parsedReply.spokenText)
+                lastModelReply = spokenText
                 journal?.appendTranscript(speaker: "tom", text: spokenText, trigger: trigger.journalName)
 
                 drawingOverlayController.show(
@@ -632,6 +670,7 @@ final class CompanionManager: ObservableObject {
     /// Speaks a short error so a failed AI request is never silent.
     private func speakResponseErrorFallback(_ error: Error) {
         let utterance = (error as? LocalizedError)?.errorDescription ?? "Something went wrong reaching the AI."
+        lastModelReply = utterance
         try? speechSynthesizerClient.speakText(utterance)
         voiceState = .responding
     }

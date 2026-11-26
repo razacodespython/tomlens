@@ -78,6 +78,25 @@ if rg -q 'RegisterEventHotKey' leanring-buddy/GlobalPushToTalkShortcutMonitor.sw
 else
   echo "FAIL  push-to-talk must use Carbon RegisterEventHotKey"; failures=$((failures + 1))
 fi
+if rg -q 'carbonVirtualKeyCode: UInt32 = 0x31' leanring-buddy/BuddyPushToTalkShortcut.swift \
+   && rg -q 'pushToTalkDisplayText = "ctrl \+ option \+ space"' leanring-buddy/BuddyPushToTalkShortcut.swift \
+   && rg -q 'Switch on, then hold Control\+Option\+Space' leanring-buddy/TomLensStatusPresentation.swift; then
+  echo "ok    push-to-talk is control + option + space, and off state says so"
+else
+  echo "FAIL  push-to-talk must be kVK_Space (0x31) and the off hint must say to switch on first"; failures=$((failures + 1))
+fi
+forbid "no leftover Control+Option+T hotkey" 'option \+ T|kVK_ANSI_T|Ctrl\+Option\+T|Control \+ Option \+ T' leanring-buddy leanring-buddyTests INSTALL.md AGENTS.md
+if rg -q 'isTomLensSwitchedOn: Bool = false' leanring-buddy/CompanionManager.swift; then
+  echo "ok    TomLens still launches switched off"
+else
+  echo "FAIL  TomLens must launch switched off"; failures=$((failures + 1))
+fi
+if rg -q 'NSWindow\(' leanring-buddy/TomLensStatusWindowController.swift \
+   && rg -q 'Open TomLens' leanring-buddy/CompanionPanelView.swift; then
+  echo "ok    status window is a normal NSWindow opened from the panel"
+else
+  echo "FAIL  status window must be an NSWindow with an Open TomLens button"; failures=$((failures + 1))
+fi
 python3 - <<'PY_PERMS' || failures=$((failures + 1))
 import plistlib, re, sys
 entitlements = plistlib.load(open("leanring-buddy/leanring-buddy.entitlements", "rb"))

@@ -2,7 +2,7 @@
 //  OverlayWindow.swift
 //  leanring-buddy
 //
-//  System-wide transparent overlay window for blue glowing cursor.
+//  System-wide transparent overlay window for the Tom face.
 //  One OverlayWindow is created per screen so the cursor buddy
 //  seamlessly follows the cursor across multiple monitors.
 //
@@ -53,24 +53,6 @@ class OverlayWindow: NSWindow {
     }
 }
 
-// Cursor-like triangle shape (equilateral)
-struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let size = min(rect.width, rect.height)
-        let height = size * sqrt(3.0) / 2.0
-
-        // Top vertex
-        path.move(to: CGPoint(x: rect.midX, y: rect.midY - height / 1.5))
-        // Bottom left vertex
-        path.addLine(to: CGPoint(x: rect.midX - size / 2, y: rect.midY + height / 3))
-        // Bottom right vertex
-        path.addLine(to: CGPoint(x: rect.midX + size / 2, y: rect.midY + height / 3))
-        path.closeSubpath()
-        return path
-    }
-}
-
 // PreferenceKey for tracking bubble size
 struct SizePreferenceKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
@@ -97,12 +79,11 @@ enum BuddyNavigationMode {
     case pointingAtTarget
 }
 
-// SwiftUI view for the blue glowing cursor pointer.
+// SwiftUI view for the Tom face that follows the pointer.
 // Each screen gets its own BlueCursorView. The view checks whether
-// the cursor is currently on THIS screen and only shows the buddy
-// triangle when it is. During voice interaction, the triangle is
-// replaced by a waveform (listening), spinner (processing), or
-// streaming text bubble (responding).
+// the cursor is currently on THIS screen and only shows the face
+// when it is. Listening, thinking, and speaking change the eyes
+// and a soft motion cue; the face never takes mouse events.
 struct BlueCursorView: View {
     let screenFrame: CGRect
     let isFirstAppearance: Bool
@@ -136,9 +117,10 @@ struct BlueCursorView: View {
     /// The buddy's current behavioral mode (following cursor, navigating, or pointing).
     @State private var buddyNavigationMode: BuddyNavigationMode = .followingCursor
 
-    /// The rotation angle of the triangle in degrees. Default is -35° (cursor-like).
-    /// Changes to face the direction of travel when navigating to a target.
-    @State private var triangleRotationDegrees: Double = -35.0
+    /// Pointer velocity in points per second, used for eye look and squash.
+    @State private var travelVelocityX: Double = 0
+    @State private var travelVelocityY: Double = 0
+    @State private var previousFollowTarget: CGPoint = .zero
 
     /// Speech bubble text shown when pointing at a detected element.
     @State private var navigationBubbleText: String = ""
@@ -172,10 +154,11 @@ struct BlueCursorView: View {
         "right here!",
         "this one!",
         "over here!",
-        "click this!",
         "here it is!",
         "found it!"
     ]
+
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     var body: some View {
         ZStack {
@@ -191,8 +174,8 @@ struct BlueCursorView: View {
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(DS.Colors.overlayCursorBlue)
-                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 6, x: 0, y: 0)
+                            .fill(Color(red: TomFaceGeometry.tileRed, green: TomFaceGeometry.tileGreen, blue: TomFaceGeometry.tileBlue))
+                            .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 0)
                     )
                     .fixedSize()
                     .overlay(
@@ -219,8 +202,8 @@ struct BlueCursorView: View {
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(DS.Colors.overlayCursorBlue)
-                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 6, x: 0, y: 0)
+                            .fill(Color(red: TomFaceGeometry.tileRed, green: TomFaceGeometry.tileGreen, blue: TomFaceGeometry.tileBlue))
+                            .shadow(color: Color.black.opacity(0.25), radius: 6, x: 0, y: 0)
                     )
                     .fixedSize()
                     .overlay(
@@ -249,10 +232,10 @@ struct BlueCursorView: View {
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(DS.Colors.overlayCursorBlue)
+                            .fill(Color(red: TomFaceGeometry.tileRed, green: TomFaceGeometry.tileGreen, blue: TomFaceGeometry.tileBlue))
                             .shadow(
-                                color: DS.Colors.overlayCursorBlue.opacity(0.5 + (1.0 - navigationBubbleScale) * 1.0),
-                                radius: 6 + (1.0 - navigationBubbleScale) * 16,
+                                color: Color.black.opacity(0.25),
+                                radius: 6,
                                 x: 0, y: 0
                             )
                     )
@@ -274,47 +257,22 @@ struct BlueCursorView: View {
                     }
             }
 
-            // Blue triangle cursor — shown when idle or while TTS is playing (responding).
-            // All three states (triangle, waveform, spinner) stay in the view tree
-            // permanently and cross-fade via opacity so SwiftUI doesn't remove/re-insert
-            // them (which caused a visible cursor "pop").
-            //
-            // During cursor following: fast spring animation for snappy tracking.
-            // During navigation: NO implicit animation — the frame-by-frame bezier
-            // timer controls position directly at 60fps for a smooth arc flight.
-            Triangle()
-                .fill(DS.Colors.overlayCursorBlue)
-                .frame(width: 16, height: 16)
-                .rotationEffect(.degrees(triangleRotationDegrees))
-                .shadow(color: DS.Colors.overlayCursorBlue, radius: 8 + (buddyFlightScale - 1.0) * 20, x: 0, y: 0)
-                .scaleEffect(buddyFlightScale)
-                .opacity(buddyIsVisibleOnThisScreen && (companionManager.voiceState == .idle || companionManager.voiceState == .responding) ? cursorOpacity : 0)
-                .position(cursorPosition)
-                .animation(
-                    buddyNavigationMode == .followingCursor
-                        ? .spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0)
-                        : nil,
-                    value: cursorPosition
-                )
-                .animation(.easeIn(duration: 0.25), value: companionManager.voiceState)
-                .animation(
-                    buddyNavigationMode == .navigatingToTarget ? nil : .easeInOut(duration: 0.3),
-                    value: triangleRotationDegrees
-                )
-
-            // Blue waveform — replaces the triangle while listening
-            BlueCursorWaveformView(audioPowerLevel: companionManager.currentAudioPowerLevel)
-                .opacity(buddyIsVisibleOnThisScreen && companionManager.voiceState == .listening ? cursorOpacity : 0)
-                .position(cursorPosition)
-                .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
-                .animation(.easeIn(duration: 0.15), value: companionManager.voiceState)
-
-            // Blue spinner — shown while the AI is processing (transcription + AI + waiting for TTS)
-            BlueCursorSpinnerView()
-                .opacity(buddyIsVisibleOnThisScreen && companionManager.voiceState == .processing ? cursorOpacity : 0)
-                .position(cursorPosition)
-                .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
-                .animation(.easeIn(duration: 0.15), value: companionManager.voiceState)
+            // Tom's face. One view for every voice state so it doesn't pop
+            // in and out. Following uses a soft spring; the bezier flight
+            // timer moves the position itself and turns that spring off.
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                let pose = tomCursorPose(at: timeline.date)
+                TomFaceView(pose: pose, diameter: 30)
+                    .scaleEffect(buddyFlightScale)
+                    .opacity(buddyIsVisibleOnThisScreen ? cursorOpacity : 0)
+                    .position(x: cursorPosition.x, y: cursorPosition.y + CGFloat(pose.bobOffsetY))
+            }
+            .animation(
+                buddyNavigationMode == .followingCursor && !accessibilityReduceMotion
+                    ? .spring(response: 0.48, dampingFraction: 0.72, blendDuration: 0)
+                    : nil,
+                value: cursorPosition
+            )
 
         }
         .frame(width: screenFrame.width, height: screenFrame.height)
@@ -365,7 +323,30 @@ struct BlueCursorView: View {
         }
     }
 
-    /// Whether the buddy triangle should be visible on this screen.
+    private func tomCursorPose(at date: Date) -> TomCursorPose {
+        TomCursorMotion.pose(
+            velocityX: travelVelocityX,
+            velocityY: travelVelocityY,
+            activity: TomLensActivity.resolve(
+                isSwitchedOn: companionManager.isTomLensSwitchedOn,
+                voicePhase: voicePhase
+            ),
+            isPointing: buddyNavigationMode == .pointingAtTarget,
+            reduceMotion: accessibilityReduceMotion,
+            time: date.timeIntervalSinceReferenceDate
+        )
+    }
+
+    private var voicePhase: TomLensVoicePhase {
+        switch companionManager.voiceState {
+        case .idle: return .idle
+        case .listening: return .listening
+        case .processing: return .processing
+        case .responding: return .responding
+        }
+    }
+
+    /// Whether the buddy face should be visible on this screen.
     /// True when cursor is on this screen during normal following, or
     /// when navigating/pointing at a target on this screen. When another
     /// screen is navigating (detectedElementScreenLocation is set but this
@@ -417,7 +398,11 @@ struct BlueCursorView: View {
             let swiftUIPosition = self.convertScreenPointToSwiftUICoordinates(mouseLocation)
             let buddyX = swiftUIPosition.x + 35
             let buddyY = swiftUIPosition.y + 25
-            self.cursorPosition = CGPoint(x: buddyX, y: buddyY)
+            let target = CGPoint(x: buddyX, y: buddyY)
+            self.travelVelocityX = (target.x - self.previousFollowTarget.x) / 0.016
+            self.travelVelocityY = (target.y - self.previousFollowTarget.y) / 0.016
+            self.previousFollowTarget = target
+            self.cursorPosition = target
         }
     }
 
@@ -535,14 +520,15 @@ struct BlueCursorView: View {
                          + 2.0 * t * (endPosition.x - controlPoint.x)
             let tangentY = 2.0 * oneMinusT * (controlPoint.y - startPosition.y)
                          + 2.0 * t * (endPosition.y - controlPoint.y)
-            // +90° offset because the triangle's "tip" points up at 0° rotation,
-            // and atan2 returns 0° for rightward movement
-            self.triangleRotationDegrees = atan2(tangentY, tangentX) * (180.0 / .pi) + 90.0
+            // Lean a little toward the direction of travel. The face stays
+            // upright; a full rotation would turn the eyes upside down.
+            self.travelVelocityX = self.accessibilityReduceMotion ? 0 : tangentX * 8
+            self.travelVelocityY = self.accessibilityReduceMotion ? 0 : tangentY * 8
 
             // Scale pulse: sin curve peaks at midpoint of the flight.
             // Buddy grows to ~1.3x at the apex, then shrinks back to 1.0x on landing.
             let scalePulse = sin(linearProgress * .pi)
-            self.buddyFlightScale = 1.0 + scalePulse * 0.3
+            self.buddyFlightScale = self.accessibilityReduceMotion ? 1.0 : 1.0 + scalePulse * 0.3
         }
     }
 
@@ -550,9 +536,6 @@ struct BlueCursorView: View {
     /// scale-in entrance and variable-speed character streaming.
     private func startPointingAtElement() {
         buddyNavigationMode = .pointingAtTarget
-
-        // Rotate back to default pointer angle now that we've arrived
-        triangleRotationDegrees = -35.0
 
         // Reset navigation bubble state — start small for the scale-bounce entrance
         navigationBubbleText = ""
@@ -643,7 +626,8 @@ struct BlueCursorView: View {
         navigationAnimationTimer = nil
         buddyNavigationMode = .followingCursor
         isReturningToCursor = false
-        triangleRotationDegrees = -35.0
+        travelVelocityX = 0
+        travelVelocityY = 0
         buddyFlightScale = 1.0
         navigationBubbleText = ""
         navigationBubbleOpacity = 0.0
@@ -681,74 +665,52 @@ struct BlueCursorView: View {
     }
 }
 
-// MARK: - Blue Cursor Waveform
+/// The flat green Tom face. Eyes are vertical pills, slightly below center.
+private struct TomFaceView: View {
+    let pose: TomCursorPose
+    let diameter: CGFloat
 
-/// A small blue waveform that replaces the triangle cursor while
-/// the user is holding the push-to-talk shortcut and speaking.
-private struct BlueCursorWaveformView: View {
-    let audioPowerLevel: CGFloat
+    private var faceGreen: Color {
+        Color(red: TomFaceGeometry.greenRed, green: TomFaceGeometry.greenGreen, blue: TomFaceGeometry.greenBlue)
+    }
 
-    private let barCount = 5
-    private let listeningBarProfile: [CGFloat] = [0.4, 0.7, 1.0, 0.7, 0.4]
+    private var eyeColor: Color {
+        Color(red: TomFaceGeometry.eyeRed, green: TomFaceGeometry.eyeGreen, blue: TomFaceGeometry.eyeBlue)
+    }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 36.0)) { timelineContext in
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { barIndex in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                        .fill(DS.Colors.overlayCursorBlue)
-                        .frame(
-                            width: 2,
-                            height: barHeight(
-                                for: barIndex,
-                                timelineDate: timelineContext.date
-                            )
-                        )
-                }
+        ZStack {
+            if pose.showsPulse {
+                Circle()
+                    .stroke(faceGreen.opacity(0.45), lineWidth: 2)
+                    .frame(width: diameter, height: diameter)
+                    .scaleEffect(CGFloat(pose.pulseScale))
             }
-            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6, x: 0, y: 0)
-            .animation(.linear(duration: 0.08), value: audioPowerLevel)
-        }
-    }
-
-    private func barHeight(for barIndex: Int, timelineDate: Date) -> CGFloat {
-        let animationPhase = CGFloat(timelineDate.timeIntervalSinceReferenceDate * 3.6) + CGFloat(barIndex) * 0.35
-        let normalizedAudioPowerLevel = max(audioPowerLevel - 0.008, 0)
-        let easedAudioPowerLevel = pow(min(normalizedAudioPowerLevel * 2.85, 1), 0.76)
-        let reactiveHeight = easedAudioPowerLevel * 10 * listeningBarProfile[barIndex]
-        let idlePulse = (sin(animationPhase) + 1) / 2 * 1.5
-        return 3 + reactiveHeight + idlePulse
-    }
-}
-
-// MARK: - Blue Cursor Spinner
-
-/// A small blue spinning indicator that replaces the triangle cursor
-/// while the AI is processing a voice input.
-private struct BlueCursorSpinnerView: View {
-    @State private var isSpinning = false
-
-    var body: some View {
-        Circle()
-            .trim(from: 0.15, to: 0.85)
-            .stroke(
-                AngularGradient(
-                    colors: [
-                        DS.Colors.overlayCursorBlue.opacity(0.0),
-                        DS.Colors.overlayCursorBlue
-                    ],
-                    center: .center
-                ),
-                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+            Circle()
+                .fill(faceGreen)
+                .frame(width: diameter, height: diameter)
+            HStack(spacing: diameter * CGFloat(TomFaceGeometry.eyeSpacingFraction)) {
+                eye
+                eye
+            }
+            .offset(y: diameter * CGFloat(TomFaceGeometry.eyeCenterYFraction))
+            .offset(
+                x: diameter * 0.08 * CGFloat(pose.eyeOffsetX),
+                y: diameter * 0.08 * CGFloat(pose.eyeOffsetY)
             )
-            .frame(width: 14, height: 14)
-            .rotationEffect(.degrees(isSpinning ? 360 : 0))
-            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6, x: 0, y: 0)
-            .onAppear {
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                    isSpinning = true
-                }
-            }
+        }
+        .scaleEffect(x: CGFloat(pose.scaleX), y: CGFloat(pose.scaleY))
+        .rotationEffect(.degrees(pose.tiltDegrees))
+        .frame(width: diameter * 1.4, height: diameter * 1.4)
+    }
+
+    private var eye: some View {
+        Capsule()
+            .fill(eyeColor)
+            .frame(
+                width: diameter * CGFloat(TomFaceGeometry.eyeWidthFraction * pose.eyeScaleX),
+                height: diameter * CGFloat(TomFaceGeometry.eyeHeightFraction * pose.eyeScaleY)
+            )
     }
 }
 

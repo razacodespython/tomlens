@@ -268,6 +268,10 @@ nonisolated final class ModelCallRateLimiter {
     }
 
     func remainingCalls(now: Date) -> Int {
-        maximumCallsPerWindow - callTimestamps.filter { now.timeIntervalSince($0) < Self.windowSeconds }.count
+        maximumCallsPerWindow - callsUsed(now: now)
+    }
+
+    func callsUsed(now: Date) -> Int {
+        callTimestamps.filter { now.timeIntervalSince($0) < Self.windowSeconds }.count
     }
 }

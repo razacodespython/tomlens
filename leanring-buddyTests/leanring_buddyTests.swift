@@ -43,7 +43,7 @@ struct leanring_buddyTests {
     }
 
     @Test func pushToTalkRawValuesMatchCarbonConstants() {
-        #expect(BuddyPushToTalkShortcut.carbonVirtualKeyCode == UInt32(kVK_ANSI_T))
+        #expect(BuddyPushToTalkShortcut.carbonVirtualKeyCode == UInt32(kVK_Space))
         #expect(BuddyPushToTalkShortcut.carbonModifierFlags == UInt32(controlKey | optionKey))
     }
 }
