@@ -14,6 +14,7 @@ pure_sources=(
   leanring-buddy/TutorDrawing.swift
   leanring-buddy/TutorTriggerPolicy.swift
   leanring-buddy/TutorPromptComposer.swift
+  leanring-buddy/SessionJournal.swift
 )
 pure_tests=(
   leanring-buddyTests/TradingWindowCapturePolicyTests.swift
@@ -24,6 +25,7 @@ pure_tests=(
   leanring-buddyTests/TutorDrawingTests.swift
   leanring-buddyTests/TutorTriggerPolicyTests.swift
   leanring-buddyTests/TutorPromptComposerTests.swift
+  leanring-buddyTests/SessionJournalTests.swift
 )
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT

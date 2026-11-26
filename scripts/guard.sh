@@ -152,6 +152,21 @@ require "frames are ~1024 px" 'frameMaximumDimension = 1024' leanring-buddy/Tuto
 require "automatic calls go through the trigger policy (cap headroom, pause)" 'TutorTriggerPolicy\.shouldSendAutomaticTrigger' leanring-buddy/CompanionManager.swift
 forbid "no order-entry or broker APIs" '(?i)placeorder|placeOCO|modifyorder|cancelorder|liquidateposition|tradovateapi|api\.tradovate|demo\.tradovateapi'
 
+echo "== M8: local session journal only =="
+require "journal lives under ~/TomLens/journal" 'appendingPathComponent\("TomLens", isDirectory: true\)' leanring-buddy/SessionJournal.swift
+require "journal redacts base64 images" 'redactedRequestBody' leanring-buddy/SessionJournal.swift
+require "every model call is journaled" 'appendModelExchange' leanring-buddy/CompanionManager.swift
+forbid "journal never sees credentials" '(?i)authorization|bearer|accessToken|refreshToken|apiKey' leanring-buddy/SessionJournal.swift
+forbid "no cloud upload of the journal" '(?i)drive\.google|googleapis\.com|dropbox|icloud|CKContainer|NSUbiquitous'
+if command -v git >/dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
+  tracked_media=$(git ls-files | rg -i '\.(jpe?g|png|gif|heic|mov|mp4|m4a|wav|mp3|caf)$' | rg -v '^leanring-buddy/Assets\.xcassets/AppIcon\.appiconset/' || true)
+  if [ -n "$tracked_media" ]; then
+    echo "FAIL  no media committed (only the app icon)"; echo "$tracked_media" | sed 's/^/      /'; failures=$((failures + 1))
+  else
+    echo "ok    no media committed (only the app icon)"
+  fi
+fi
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys

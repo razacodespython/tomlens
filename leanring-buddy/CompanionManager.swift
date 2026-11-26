@@ -73,6 +73,8 @@ final class CompanionManager: ObservableObject {
     private let drawingOverlayController = TradingWindowDrawingOverlayController()
     /// ~1 fps sampling, bar-close and sharp-change triggers while switched on.
     private let tutorEventMonitor = TutorEventMonitor()
+    /// Local journal (~/TomLens/journal/<session>/), one per switch-on.
+    private var sessionJournal: SessionJournal?
     /// When the current push-to-talk hold began, for the accidental-tap check.
     private var pushToTalkPressedAt: Date?
     /// Force-stops the mic if a hold exceeds the maximum (e.g. a missed key-up).
@@ -147,6 +149,7 @@ final class CompanionManager: ObservableObject {
         } else {
             globalPushToTalkShortcutMonitor.stop()
             tutorEventMonitor.stop()
+            sessionJournal = nil
             pendingKeyboardShortcutStartTask?.cancel()
             pendingKeyboardShortcutStartTask = nil
             pushToTalkMaximumHoldTask?.cancel()
@@ -204,6 +207,12 @@ final class CompanionManager: ObservableObject {
 
     /// Starts ~1 fps sampling of the picked window and the automatic triggers.
     private func startTutorEventMonitor() {
+        do {
+            sessionJournal = try SessionJournal()
+        } catch {
+            sessionJournal = nil
+            print("⚠️ Couldn't create the session journal: \(error.localizedDescription)")
+        }
         tutorEventMonitor.onAutomaticTrigger = { [weak self] trigger in
             self?.handleAutomaticTrigger(trigger)
         }
@@ -509,6 +518,13 @@ final class CompanionManager: ObservableObject {
 
                 let framesToSend = tutorEventMonitor.frameBuffer.framesToSend()
                 let requestTime = Date()
+                let journal = sessionJournal
+                let journalTurn = journal?.beginTurn() ?? 0
+                let journalFrameFiles = journal?.writeFrames(framesToSend, turn: journalTurn) ?? []
+                if case .pushToTalk(let transcript) = trigger {
+                    journal?.appendTranscript(speaker: "raza", text: transcript, trigger: trigger.journalName)
+                }
+                var journaledRequestBody: [String: Any]?
                 let labeledImages = framesToSend.enumerated().map { index, frame in
                     (data: frame.jpegData, label: TutorPromptComposer.frameLabel(index: index, frame: frame, now: requestTime))
                 }
@@ -516,15 +532,25 @@ final class CompanionManager: ObservableObject {
                     (userPlaceholder: entry.userTranscript, assistantResponse: entry.assistantResponse)
                 }
 
-                let fullResponseText = try await CompanionBrain.requestResponse(
-                    images: labeledImages,
-                    systemPrompt: TutorPromptComposer.instructions(
-                        ruleset: Self.tutorRuleset,
-                        rollingSummary: rollingSessionSummary
-                    ),
-                    conversationHistory: historyForAPI,
-                    userPrompt: trigger.userPromptText
-                )
+                let fullResponseText: String
+                do {
+                    fullResponseText = try await CompanionBrain.requestResponse(
+                        images: labeledImages,
+                        systemPrompt: TutorPromptComposer.instructions(
+                            ruleset: Self.tutorRuleset,
+                            rollingSummary: rollingSessionSummary
+                        ),
+                        conversationHistory: historyForAPI,
+                        userPrompt: trigger.userPromptText,
+                        onRequestBody: { journaledRequestBody = $0 }
+                    )
+                    journal?.appendModelExchange(turn: journalTurn, trigger: trigger.journalName, requestBody: journaledRequestBody,
+                                                 frameFiles: journalFrameFiles, responseText: fullResponseText, errorDescription: nil)
+                } catch {
+                    journal?.appendModelExchange(turn: journalTurn, trigger: trigger.journalName, requestBody: journaledRequestBody,
+                                                 frameFiles: journalFrameFiles, responseText: nil, errorDescription: error.localizedDescription)
+                    throw error
+                }
 
                 guard !Task.isCancelled, isTomLensSwitchedOn else { return }
 
@@ -547,6 +573,7 @@ final class CompanionManager: ObservableObject {
                     return
                 }
                 let spokenText = TutorResponseSafetyFilter.filtered(parsedReply.spokenText)
+                journal?.appendTranscript(speaker: "tom", text: spokenText, trigger: trigger.journalName)
 
                 drawingOverlayController.show(
                     drawing,

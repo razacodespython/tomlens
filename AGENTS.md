@@ -37,7 +37,13 @@ Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, cons
 ## Status (milestones)
 
 - **M0** rename, CI, guard. **M1** delete list. **M2** one-window capture (`TradingWindowCapturePolicy`, `CompanionScreenCaptureUtility`, panel window picker). **M3** Carbon hot key push-to-talk (`GlobalPushToTalkShortcutMonitor`, `BuddyPushToTalkShortcut`: ctrl + option + T), menu-bar on/off switch (`CompanionManager.isTomLensSwitchedOn`, launches off), entitlements trimmed.
-- Next: M4 Apple STT/TTS polish, M5 SIWC brain (`CompanionBrain` currently throws `notConfigured`), M6 draw overlay, M7 tutor triggers + ruleset prompt, M8 journal (`~/TomLens/journal`), M9 release artifact + install runbook.
+- **M4** `PushToTalkUtterancePolicy` (50 s mic cap, 0.3 s tap filter, noise transcripts dropped, speech cleanup); trading keyterms fed to Apple Speech.
+- **M5** Sign in with ChatGPT: `ChatGPTSignInProtocol` (pure PKCE/authorize/callback/token/ID-token logic), `ChatGPTSignInService` (browser + 127.0.0.1 loopback, Keychain, JWKS RS256 check, serialized refresh), `ResponsesAPIProtocol` (store:false + stream:true bodies, SSE parser, error classifier, `ModelCallRateLimiter` 40/hour). `CompanionBrain` never falls back to paid credits; usage-limit pauses. Own-API-key fallback (`TomLensAPIKeyFallback`) is off by default.
+- **M6** `TutorDrawing` (`<draw>[...]</draw>` point/arrow/circle/level in screenshot pixels) on `TradingWindowDrawingOverlayController` (click-through, capture-excluded, follows SCWindow.frame, 8 s).
+- **M7** `TutorTriggerPolicy` (push-to-talk, 3-minute bar close, sharp frame change, call headroom), `TutorEventMonitor` (~1 fps picked-window sampling, last 3 frames at 1024 px), `TutorPromptComposer` (bundled `TutorRulesetPrompt.md` + view-only rules + rolling `<summary>`, `<silent/>`), `TutorResponseSafetyFilter`.
+- **M8** `SessionJournal`: `~/TomLens/journal/<yyyyMMdd-HHmmss>/` frames, `transcript.jsonl`, `model.jsonl` (images replaced by file names; no credentials).
+- Pure files are `nonisolated` (the app target defaults to MainActor) and listed in `scripts/run-pure-swift-tests.sh`.
+- Next: M9 release artifact + install runbook (needs a GitHub remote).
 
 ## Engineering rules
 
