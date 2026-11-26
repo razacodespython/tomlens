@@ -12,6 +12,7 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 extension Notification.Name {
@@ -30,6 +31,7 @@ final class MenuBarPanelManager: NSObject {
     private var panel: NSPanel?
     private var clickOutsideMonitor: Any?
     private var dismissPanelObserver: NSObjectProtocol?
+    private var onOffSwitchCancellable: AnyCancellable?
 
     private let companionManager: CompanionManager
     private let panelWidth: CGFloat = 320
@@ -39,6 +41,14 @@ final class MenuBarPanelManager: NSObject {
         self.companionManager = companionManager
         super.init()
         createStatusItem()
+
+        // Keep the menu bar icon in sync with the on/off switch so its state
+        // is always visible: filled triangle = on, outline = off.
+        onOffSwitchCancellable = companionManager.$isTomLensSwitchedOn
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isTomLensSwitchedOn in
+                self?.updateStatusItemIcon(isTomLensSwitchedOn: isTomLensSwitchedOn)
+            }
 
         dismissPanelObserver = NotificationCenter.default.addObserver(
             forName: .clickyDismissPanel,
@@ -65,15 +75,21 @@ final class MenuBarPanelManager: NSObject {
 
         guard let button = statusItem?.button else { return }
 
-        button.image = makeClickyMenuBarIcon()
-        button.image?.isTemplate = true
         button.action = #selector(statusItemClicked)
         button.target = self
     }
 
-    /// Draws the clicky triangle as a menu bar icon. Uses the same shape
+    private func updateStatusItemIcon(isTomLensSwitchedOn: Bool) {
+        guard let button = statusItem?.button else { return }
+        button.image = makeTomLensMenuBarIcon(isTomLensSwitchedOn: isTomLensSwitchedOn)
+        button.image?.isTemplate = true
+        button.toolTip = isTomLensSwitchedOn ? "TomLens is on" : "TomLens is off"
+    }
+
+    /// Draws the cursor triangle as a menu bar icon. Uses the same shape
     /// and rotation as the in-app cursor so the menu bar icon matches.
-    private func makeClickyMenuBarIcon() -> NSImage {
+    /// Filled when TomLens is on, outlined when it is off.
+    private func makeTomLensMenuBarIcon(isTomLensSwitchedOn: Bool) -> NSImage {
         let iconSize: CGFloat = 18
         let image = NSImage(size: NSSize(width: iconSize, height: iconSize))
         image.lockFocus()
@@ -100,8 +116,14 @@ final class MenuBarPanelManager: NSObject {
         path.line(to: rotate(bottomRight))
         path.close()
 
-        NSColor.black.setFill()
-        path.fill()
+        if isTomLensSwitchedOn {
+            NSColor.black.setFill()
+            path.fill()
+        } else {
+            NSColor.black.setStroke()
+            path.lineWidth = 1.5
+            path.stroke()
+        }
 
         image.unlockFocus()
         return image

@@ -64,6 +64,44 @@ else
   echo "ok    denylist keywords present (wallet, metamask, hyperliquid, rabby, phantom)"
 fi
 
+echo "== M3: push-to-talk via Carbon hot key, minimal permissions =="
+forbid "no CGEvent taps (need Input Monitoring)" 'tapCreate|CGEventTap|CFMachPortCreateRunLoopSource'
+forbid "no keyboard monitoring / Input Monitoring APIs" 'keyDown|keyUp|flagsChanged|IOHIDManager|IOHIDRequestAccess|CGRequestListenEventAccess|CGPreflightListenEventAccess|Privacy_ListenEvent'
+forbid "no always-listening voice activity detection" '(?i)voiceActivityDetect|\bVAD\b|alwaysListening'
+if rg -q 'RegisterEventHotKey' leanring-buddy/GlobalPushToTalkShortcutMonitor.swift; then
+  echo "ok    push-to-talk uses Carbon RegisterEventHotKey"
+else
+  echo "FAIL  push-to-talk must use Carbon RegisterEventHotKey"; failures=$((failures + 1))
+fi
+python3 - <<'PY_PERMS' || failures=$((failures + 1))
+import plistlib, re, sys
+entitlements = plistlib.load(open("leanring-buddy/leanring-buddy.entitlements", "rb"))
+allowed_entitlements = {
+    "com.apple.security.app-sandbox": False,
+    "com.apple.security.network.client": True,
+    "com.apple.security.device.audio-input": True,
+}
+info_plist = plistlib.load(open("leanring-buddy/Info.plist", "rb"))
+usage_keys = {key for key in info_plist if key.endswith("UsageDescription")}
+project_usage_keys = set(re.findall(r"INFOPLIST_KEY_(NS\w+UsageDescription)", open("leanring-buddy.xcodeproj/project.pbxproj").read()))
+allowed_usage_keys = {"NSMicrophoneUsageDescription", "NSScreenCaptureUsageDescription", "NSSpeechRecognitionUsageDescription"}
+problems = []
+if entitlements != allowed_entitlements:
+    problems.append(f"entitlements must be exactly {allowed_entitlements}, got {entitlements}")
+if not usage_keys | project_usage_keys <= allowed_usage_keys:
+    problems.append(f"unexpected permission usage keys: {sorted((usage_keys | project_usage_keys) - allowed_usage_keys)}")
+if info_plist.get("LSUIElement") is not True:
+    problems.append("LSUIElement must stay true (menu-bar only app)")
+if problems:
+    print("FAIL  permissions:"); [print("      " + problem) for problem in problems]; sys.exit(1)
+print("ok    permissions limited to Screen Recording, Microphone, Speech Recognition")
+PY_PERMS
+if rg -q 'isTomLensSwitchedOn' leanring-buddy/MenuBarPanelManager.swift && rg -q 'setTomLensSwitchedOn' leanring-buddy/CompanionPanelView.swift; then
+  echo "ok    visible menu-bar on/off switch wired"
+else
+  echo "FAIL  menu-bar on/off switch missing"; failures=$((failures + 1))
+fi
+
 echo "== M0: deployment target >= 14.2 =="
 python3 - "$PROJECT_FILE" <<'PY' || failures=$((failures + 1))
 import re, sys

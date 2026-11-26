@@ -69,9 +69,6 @@ final class CompanionManager: ObservableObject {
     private var audioPowerCancellable: AnyCancellable?
     private var permissionCheckTimer: Timer?
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
-    /// Scheduled hide for transient cursor mode — cancelled if the user
-    /// speaks again before the delay elapses.
-    private var transientHideTask: Task<Void, Never>?
 
     /// True when the required permissions (screen recording, screen content,
     /// microphone) are granted. Used by the panel to show a single "all good" state.
@@ -124,24 +121,30 @@ final class CompanionManager: ObservableObject {
         pickedTradingWindow = selection
     }
 
-    /// User preference for whether the Clicky cursor should be shown.
-    /// When toggled off, the overlay is hidden and push-to-talk is disabled.
-    /// Persisted to UserDefaults so the choice survives app restarts.
-    @Published var isClickyCursorEnabled: Bool = UserDefaults.standard.object(forKey: "isClickyCursorEnabled") == nil
-        ? true
-        : UserDefaults.standard.bool(forKey: "isClickyCursorEnabled")
+    /// The visible menu-bar on/off switch. Off means: hot key unregistered
+    /// (so the mic can't start), no capture, no AI calls, overlay hidden.
+    /// Deliberately not persisted: TomLens always launches switched off.
+    @Published private(set) var isTomLensSwitchedOn: Bool = false
 
-    func setClickyCursorEnabled(_ enabled: Bool) {
-        isClickyCursorEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: "isClickyCursorEnabled")
-        transientHideTask?.cancel()
-        transientHideTask = nil
+    func setTomLensSwitchedOn(_ switchedOn: Bool) {
+        isTomLensSwitchedOn = switchedOn
 
-        if enabled {
+        if switchedOn {
+            globalPushToTalkShortcutMonitor.start()
+            refreshPickableTradingWindows()
             overlayWindowManager.hasShownOverlayBefore = true
             overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
             isOverlayVisible = true
         } else {
+            globalPushToTalkShortcutMonitor.stop()
+            pendingKeyboardShortcutStartTask?.cancel()
+            pendingKeyboardShortcutStartTask = nil
+            buddyDictationManager.cancelCurrentDictation()
+            currentResponseTask?.cancel()
+            currentResponseTask = nil
+            speechSynthesizerClient.stopPlayback()
+            clearDetectedElementLocation()
+            voiceState = .idle
             overlayWindowManager.hideOverlay()
             isOverlayVisible = false
         }
@@ -161,18 +164,8 @@ final class CompanionManager: ObservableObject {
         bindVoiceStateObservation()
         bindAudioPowerLevel()
         bindShortcutTransitions()
-        globalPushToTalkShortcutMonitor.start()
-        refreshPickableTradingWindows()
-
-        // If the user already completed onboarding AND all permissions are
-        // still granted, show the cursor overlay immediately. If permissions
-        // were revoked (e.g. signing change), don't show the cursor — the
-        // panel will show the permissions UI instead.
-        if hasCompletedOnboarding && allPermissionsGranted && isClickyCursorEnabled {
-            overlayWindowManager.hasShownOverlayBefore = true
-            overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-            isOverlayVisible = true
-        }
+        // TomLens launches switched off: the hot key is registered and the
+        // overlay shown only after the user flips the menu-bar switch on.
     }
 
     /// Called by BlueCursorView after the buddy finishes its pointing
@@ -187,19 +180,11 @@ final class CompanionManager: ObservableObject {
         // again on future launches — the cursor will auto-show instead
         hasCompletedOnboarding = true
 
-        // Show the overlay for the first time — isFirstAppearance triggers
-        // the welcome animation and onboarding video
-        overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-        isOverlayVisible = true
-    }
-
-    /// Replays the onboarding experience from the "Watch Onboarding Again"
-    /// footer link. Same flow as triggerOnboarding but the cursor overlay
-    /// is already visible so we just restart the welcome animation and video.
-    func replayOnboarding() {
-        NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
-        // Tear down any existing overlays and recreate with isFirstAppearance = true
-        overlayWindowManager.hasShownOverlayBefore = false
+        // Switch TomLens on and show the overlay for the first time —
+        // isFirstAppearance triggers the welcome animation
+        isTomLensSwitchedOn = true
+        globalPushToTalkShortcutMonitor.start()
+        refreshPickableTradingWindows()
         overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
         isOverlayVisible = true
     }
@@ -214,7 +199,6 @@ final class CompanionManager: ObservableObject {
         globalPushToTalkShortcutMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
-        transientHideTask?.cancel()
 
         currentResponseTask?.cancel()
         currentResponseTask = nil
@@ -284,13 +268,6 @@ final class CompanionManager: ObservableObject {
                     hasScreenContentPermission = true
                     UserDefaults.standard.set(true, forKey: "hasScreenContentPermission")
                     refreshPickableTradingWindows()
-
-                    // If onboarding was already completed, show the cursor overlay now
-                    if hasCompletedOnboarding && allPermissionsGranted && !isOverlayVisible && isClickyCursorEnabled {
-                        overlayWindowManager.hasShownOverlayBefore = true
-                        overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-                        isOverlayVisible = true
-                    }
                 }
             } catch {
                 print("⚠️ Screen content permission request failed: \(error)")
@@ -352,15 +329,6 @@ final class CompanionManager: ObservableObject {
                     self.voiceState = .processing
                 } else {
                     self.voiceState = .idle
-                    // If the user pressed and released the hotkey without
-                    // saying anything, no response task runs — schedule the
-                    // transient hide here so the overlay doesn't get stuck.
-                    // Only do this when no response is in flight, otherwise
-                    // the brief idle gap between recording and processing
-                    // would prematurely hide the overlay.
-                    if self.currentResponseTask == nil {
-                        self.scheduleTransientHideIfNeeded()
-                    }
                 }
             }
     }
@@ -377,18 +345,9 @@ final class CompanionManager: ObservableObject {
     private func handleShortcutTransition(_ transition: BuddyPushToTalkShortcut.ShortcutTransition) {
         switch transition {
         case .pressed:
+            // Defense in depth: the hot key is unregistered while switched off.
+            guard isTomLensSwitchedOn else { return }
             guard !buddyDictationManager.isDictationInProgress else { return }
-
-            // Cancel any pending transient hide so the overlay stays visible
-            transientHideTask?.cancel()
-            transientHideTask = nil
-
-            // If the cursor is hidden, bring it back transiently for this interaction
-            if !isClickyCursorEnabled && !isOverlayVisible {
-                overlayWindowManager.hasShownOverlayBefore = true
-                overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-                isOverlayVisible = true
-            }
 
             // Dismiss the menu bar panel so it doesn't cover the screen
             NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
@@ -488,6 +447,8 @@ final class CompanionManager: ObservableObject {
             voiceState = .processing
 
             do {
+                guard isTomLensSwitchedOn else { return }
+
                 // Capture only the picked trading window (never the full screen)
                 let windowCapture = try await CompanionScreenCaptureUtility.capturePickedWindowAsJPEG(
                     pickedSelection: pickedTradingWindow
@@ -581,38 +542,7 @@ final class CompanionManager: ObservableObject {
 
             if !Task.isCancelled {
                 voiceState = .idle
-                scheduleTransientHideIfNeeded()
             }
-        }
-    }
-
-    /// If the cursor is in transient mode (user toggled "Show Clicky" off),
-    /// waits for TTS playback and any pointing animation to finish, then
-    /// fades out the overlay after a 1-second pause. Cancelled automatically
-    /// if the user starts another push-to-talk interaction.
-    private func scheduleTransientHideIfNeeded() {
-        guard !isClickyCursorEnabled && isOverlayVisible else { return }
-
-        transientHideTask?.cancel()
-        transientHideTask = Task {
-            // Wait for TTS audio to finish playing
-            while speechSynthesizerClient.isPlaying {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                guard !Task.isCancelled else { return }
-            }
-
-            // Wait for pointing animation to finish (location is cleared
-            // when the buddy flies back to the cursor)
-            while detectedElementScreenLocation != nil {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                guard !Task.isCancelled else { return }
-            }
-
-            // Pause 1s after everything finishes, then fade out
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-            guard !Task.isCancelled else { return }
-            overlayWindowManager.fadeOutAndHideOverlay()
-            isOverlayVisible = false
         }
     }
 
@@ -681,7 +611,7 @@ final class CompanionManager: ObservableObject {
     }
 
     func startOnboardingPromptStream() {
-        let message = "press control + option and introduce yourself"
+        let message = "hold \(BuddyPushToTalkShortcut.pushToTalkSpokenText) and ask me about your chart"
         onboardingPromptText = ""
         showOnboardingPrompt = true
         onboardingPromptOpacity = 0.0

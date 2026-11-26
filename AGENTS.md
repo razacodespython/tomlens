@@ -27,11 +27,17 @@ TomLens is a stripped-down, view-only fork of [farzaa/clicky](https://github.com
 
 ```bash
 ./scripts/guard.sh                       # any OS with ripgrep + python3
+./scripts/run-pure-swift-tests.sh        # pure-Swift logic tests via SwiftPM (Linux OK)
 xcodebuild test -project leanring-buddy.xcodeproj -scheme TomLens -destination 'platform=macOS' \
   CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=   # CI only, not on Raza's Mac
 ```
 
 Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, consistent, and verified by grep.
+
+## Status (milestones)
+
+- **M0** rename, CI, guard. **M1** delete list. **M2** one-window capture (`TradingWindowCapturePolicy`, `CompanionScreenCaptureUtility`, panel window picker). **M3** Carbon hot key push-to-talk (`GlobalPushToTalkShortcutMonitor`, `BuddyPushToTalkShortcut`: ctrl + option + T), menu-bar on/off switch (`CompanionManager.isTomLensSwitchedOn`, launches off), entitlements trimmed.
+- Next: M4 Apple STT/TTS polish, M5 SIWC brain (`CompanionBrain` currently throws `notConfigured`), M6 draw overlay, M7 tutor triggers + ruleset prompt, M8 journal (`~/TomLens/journal`), M9 release artifact + install runbook.
 
 ## Engineering rules
 

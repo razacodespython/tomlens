@@ -48,14 +48,13 @@ struct CompanionPanelView: View {
                     .padding(.horizontal, 16)
             }
 
-            // Show Clicky toggle — hidden for now
-            // if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            //     Spacer()
-            //         .frame(height: 16)
-            //
-            //     showClickyCursorToggleRow
-            //         .padding(.horizontal, 16)
-            // }
+            if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
+                Spacer()
+                    .frame(height: 16)
+
+                tomLensOnOffSwitchRow
+                    .padding(.horizontal, 16)
+            }
 
             Spacer()
                 .frame(height: 12)
@@ -118,7 +117,9 @@ struct CompanionPanelView: View {
     @ViewBuilder
     private var permissionsCopySection: some View {
         if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            Text("Hold Control+Option to talk.")
+            Text(companionManager.isTomLensSwitchedOn
+                 ? "Hold \(BuddyPushToTalkShortcut.pushToTalkDisplayText) to talk."
+                 : "TomLens is off. Flip the switch below to start.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -459,17 +460,18 @@ struct CompanionPanelView: View {
         }
     }
 
-    // MARK: - Show Clicky Cursor Toggle
+    // MARK: - On/Off Switch
 
-    private var showClickyCursorToggleRow: some View {
+    /// The visible on/off switch. Off: no hot key, no mic, no capture, no AI.
+    private var tomLensOnOffSwitchRow: some View {
         HStack {
             HStack(spacing: 8) {
-                Image(systemName: "cursorarrow")
+                Image(systemName: companionManager.isTomLensSwitchedOn ? "eye" : "eye.slash")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(DS.Colors.textTertiary)
                     .frame(width: 16)
 
-                Text("Show Clicky")
+                Text(companionManager.isTomLensSwitchedOn ? "TomLens is on" : "TomLens is off")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
             }
@@ -477,13 +479,14 @@ struct CompanionPanelView: View {
             Spacer()
 
             Toggle("", isOn: Binding(
-                get: { companionManager.isClickyCursorEnabled },
-                set: { companionManager.setClickyCursorEnabled($0) }
+                get: { companionManager.isTomLensSwitchedOn },
+                set: { companionManager.setTomLensSwitchedOn($0) }
             ))
             .toggleStyle(.switch)
             .labelsHidden()
             .tint(DS.Colors.accent)
             .scaleEffect(0.8)
+            .pointerCursor()
         }
         .padding(.vertical, 4)
     }
@@ -528,23 +531,6 @@ struct CompanionPanelView: View {
             .buttonStyle(.plain)
             .pointerCursor()
 
-            if companionManager.hasCompletedOnboarding {
-                Spacer()
-
-                Button(action: {
-                    companionManager.replayOnboarding()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "play.circle")
-                            .font(.system(size: 11, weight: .medium))
-                        Text("Watch Onboarding Again")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundColor(DS.Colors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .pointerCursor()
-            }
         }
     }
 
@@ -558,7 +544,7 @@ struct CompanionPanelView: View {
     }
 
     private var statusDotColor: Color {
-        if !companionManager.isOverlayVisible {
+        if !companionManager.isTomLensSwitchedOn || !companionManager.isOverlayVisible {
             return DS.Colors.textTertiary
         }
         switch companionManager.voiceState {
@@ -574,6 +560,9 @@ struct CompanionPanelView: View {
     private var statusText: String {
         if !companionManager.hasCompletedOnboarding || !companionManager.allPermissionsGranted {
             return "Setup"
+        }
+        if !companionManager.isTomLensSwitchedOn {
+            return "Off"
         }
         if !companionManager.isOverlayVisible {
             return "Ready"

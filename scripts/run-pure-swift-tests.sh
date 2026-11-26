@@ -7,9 +7,11 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 pure_sources=(
   leanring-buddy/TradingWindowCapturePolicy.swift
   leanring-buddy/TradingWindowCoordinateMapping.swift
+  leanring-buddy/BuddyPushToTalkShortcut.swift
 )
 pure_tests=(
   leanring-buddyTests/TradingWindowCapturePolicyTests.swift
+  leanring-buddyTests/BuddyPushToTalkShortcutTests.swift
 )
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT

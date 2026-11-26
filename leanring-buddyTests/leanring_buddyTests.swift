@@ -5,6 +5,7 @@
 //  Created by thorfinn on 3/2/26.
 //
 
+import Carbon.HIToolbox
 import Testing
 @testable import TomLens
 
@@ -37,4 +38,8 @@ struct leanring_buddyTests {
         #expect(shouldTreatPermissionAsGranted)
     }
 
+    @Test func pushToTalkRawValuesMatchCarbonConstants() {
+        #expect(BuddyPushToTalkShortcut.carbonVirtualKeyCode == UInt32(kVK_ANSI_T))
+        #expect(BuddyPushToTalkShortcut.carbonModifierFlags == UInt32(controlKey | optionKey))
+    }
 }
