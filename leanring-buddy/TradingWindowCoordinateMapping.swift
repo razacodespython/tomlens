@@ -8,6 +8,9 @@
 //
 
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 nonisolated enum TradingWindowCoordinateMapping {
     static func appKitGlobalPoint(

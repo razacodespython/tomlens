@@ -8,6 +8,8 @@
 //
 
 import AppKit
+import CoreGraphics
+import Foundation
 import ScreenCaptureKit
 
 enum PermissionRequestPresentationDestination: Equatable {

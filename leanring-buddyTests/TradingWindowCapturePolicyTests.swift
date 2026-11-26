@@ -4,6 +4,9 @@
 //
 
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Testing
 @testable import TomLens
 

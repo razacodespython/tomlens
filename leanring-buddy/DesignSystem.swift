@@ -7,8 +7,10 @@
 //  interaction states are defined here as the single source of truth.
 //
 
-import SwiftUI
 import AppKit
+import CoreGraphics
+import Dispatch
+import SwiftUI
 
 // MARK: - Design System Namespace
 

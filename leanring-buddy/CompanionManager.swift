@@ -7,8 +7,11 @@
 //  exposes observable voice state for the panel UI.
 //
 
+import AppKit
 import AVFoundation
 import Combine
+import CoreGraphics
+import Dispatch
 import Foundation
 import ScreenCaptureKit
 import SwiftUI

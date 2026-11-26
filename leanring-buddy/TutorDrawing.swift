@@ -14,6 +14,9 @@
 //
 
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 nonisolated enum TutorDrawShape: Equatable {
     case point(CGPoint, label: String?)

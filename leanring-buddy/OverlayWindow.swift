@@ -8,6 +8,8 @@
 //
 
 import AppKit
+import CoreGraphics
+import Dispatch
 import SwiftUI
 
 class OverlayWindow: NSWindow {

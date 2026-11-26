@@ -9,6 +9,9 @@
 //
 
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// A window that ScreenCaptureKit reported as shareable, reduced to the
 /// fields the policy needs.
