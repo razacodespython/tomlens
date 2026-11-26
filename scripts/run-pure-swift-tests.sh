@@ -17,6 +17,10 @@ pure_sources=(
   leanring-buddy/SessionJournal.swift
   leanring-buddy/TomLensStatusPresentation.swift
   leanring-buddy/TomCursorMotion.swift
+  leanring-buddy/TomNetworkAllowlist.swift
+  leanring-buddy/TomRelaySignature.swift
+  leanring-buddy/TomRelayProtocol.swift
+  leanring-buddy/TomRelaySettings.swift
 )
 pure_tests=(
   leanring-buddyTests/TradingWindowCapturePolicyTests.swift
@@ -30,6 +34,7 @@ pure_tests=(
   leanring-buddyTests/SessionJournalTests.swift
   leanring-buddyTests/TomLensStatusPresentationTests.swift
   leanring-buddyTests/TomCursorMotionTests.swift
+  leanring-buddyTests/TomRelayTests.swift
 )
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT

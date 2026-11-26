@@ -45,6 +45,7 @@ Linux agents cannot run `xcodebuild`: keep `project.pbxproj` edits minimal, cons
 - Pure files are `nonisolated` (the app target defaults to MainActor) and listed in `scripts/run-pure-swift-tests.sh`.
 - **M9** macOS CI builds and tests an ad-hoc-signed `TomLens.app` and uploads `TomLens-unsigned-app`. `INSTALL.md` is the unsigned-app install runbook.
 - **0.1.5** Hotkey is Control+Option+Z. TomLens still launches off. Permissions still prompt with Allow while undecided. CI keeps the identifier designated requirement. The mascot is the flat green Tom face: two dark vertical pills, a little closer together than 0.1.1, with the original follow, lean, blink, and listening pulse.
+- **0.1.6** Ask Tom relay. Session end and switch-off POST `session_end` to the webhook Raza pastes; the sender key stays in the Keychain. Ask Tom is capped at 6 per session and 3 minutes apart, plus one session end. Replies arrive on an outbound ntfy stream only while the switch is on, and only a matching unexpired nonce is spoken, labeled Tom (review). ChatGPT stays the live answer. Outbound hosts are ChatGPT/OpenAI, the one webhook host, and ntfy.sh.
 
 ## Engineering rules
 

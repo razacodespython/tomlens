@@ -6,7 +6,7 @@ You need macOS 14.2 or newer. The download is an unsigned app, so macOS will ask
 
 ## 1. Download and unzip
 
-1. Download `TomLens-unsigned.zip` from the GitHub Actions artifact (or the `v0.1.0-alpha` prerelease, if one is attached).
+1. Download `TomLens-unsigned.zip` from the GitHub Actions artifact (or the `v0.1.6-alpha` prerelease, if one is attached).
 2. Double-click the zip. macOS expands it into `TomLens.app`.
 3. Drag `TomLens.app` into your **Applications** folder.
 
@@ -81,4 +81,18 @@ In Finder, choose **Go > Go to Folder…** and paste that path. Each folder is o
 
 ## Turn it off
 
-Flip the switch back to **TomLens is off**, or quit the app from the menu bar icon. Off stops the hotkey, the microphone, window capture, and ChatGPT calls.
+Flip the switch back to **TomLens is off**, or quit the app from the menu bar icon. Off stops the hotkey, the microphone, window capture, ChatGPT calls, and the reply stream. Switching off also sends the session to Tom when a webhook URL is saved.
+
+## Ask Tom
+
+ChatGPT still answers while you hold the hotkey. Tom is slower and advisory: he does not place trades and he does not take the in-trade role.
+
+In the status window:
+
+1. Paste the webhook URL from Tom's Routines panel. Leave it empty and TomLens will not post. The app keeps running.
+2. Paste the sender key and click **Save key**. The key stays in the Keychain. TomLens does not put it in the journal or the log.
+3. The reply topic is already filled in and masked. **Copy topic** if Tom needs it again. **Rotate topic** makes a new one. After a rotate, tell Tom the new topic yourself. The topic is not written to the log or the journal.
+
+**Ask Tom** sends one question. You can ask at most 6 times in a session, and at least 3 minutes apart. While Tom has not answered, the window says **Tom is thinking…**. A reply shows as **Tom (review)** and is spoken that way. You can also start a question with "ask Tom" while holding the hotkey. ChatGPT still answers that turn.
+
+At the end of a session the window can **Resend to Tom**. That posts the same saved payload again. A copy is always written to the session folder as `tom-payload.json`.

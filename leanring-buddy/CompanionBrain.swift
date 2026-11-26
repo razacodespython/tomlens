@@ -105,6 +105,8 @@ enum CompanionBrain {
     }
 
     private static func streamResponseText(for request: URLRequest) async throws -> String {
+        guard let url = request.url else { throw TomNetworkAllowlistError.urlNotAllowed }
+        try TomNetworkAllowlist.validate(url, configuredWebhookURL: nil)
         let (byteStream, response) = try await URLSession.shared.bytes(for: request)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard statusCode == 200 else {

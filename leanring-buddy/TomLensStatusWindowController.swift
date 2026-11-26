@@ -32,9 +32,12 @@ final class TomLensStatusWindowController {
     }
 
     private func makeStatusWindow() -> NSWindow {
-        let hostingView = NSHostingView(rootView: TomLensStatusView(companionManager: companionManager))
+        let hostingView = NSHostingView(rootView: TomLensStatusView(
+            companionManager: companionManager,
+            tomRelayCoordinator: companionManager.tomRelayCoordinator
+        ))
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 700),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 820),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -49,7 +52,10 @@ final class TomLensStatusWindowController {
 
 struct TomLensStatusView: View {
     @ObservedObject var companionManager: CompanionManager
+    @ObservedObject var tomRelayCoordinator: TomRelayCoordinator
     @ObservedObject private var chatGPTSignInService = ChatGPTSignInService.shared
+    @State private var webhookKeyDraft = ""
+    @State private var askDraft = ""
 
     var body: some View {
         ScrollView {
@@ -61,6 +67,7 @@ struct TomLensStatusView: View {
                 hotkeyRow
                 activityRow
                 transcriptSection
+                tomSection
                 actionRow
             }
             .padding(20)
@@ -280,6 +287,137 @@ struct TomLensStatusView: View {
             ))
             .font(.callout)
             .foregroundStyle(Color.secondary)
+        }
+    }
+
+    private var tomSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tom")
+                .font(.headline)
+            Text(TomRelayStatusPresentation.advisoryNote)
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(TomRelayStatusPresentation.emptyWebhookNote)
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Webhook URL")
+                .font(.callout)
+            TextField("https://", text: Binding(
+                get: { tomRelayCoordinator.webhookURLString },
+                set: { tomRelayCoordinator.webhookURLString = $0 }
+            ))
+            .textFieldStyle(.roundedBorder)
+
+            Text("Webhook key")
+                .font(.callout)
+            SecureField("Paste sender key", text: $webhookKeyDraft)
+                .textFieldStyle(.roundedBorder)
+                .privacySensitive()
+            Text(tomRelayCoordinator.webhookKeyIsStored
+                 ? TomRelayStatusPresentation.webhookKeyCaptionStored
+                 : TomRelayStatusPresentation.webhookKeyCaptionEmpty)
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+            HStack {
+                Button("Save key") {
+                    tomRelayCoordinator.saveWebhookKey(webhookKeyDraft)
+                    webhookKeyDraft = ""
+                }
+                .disabled(webhookKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .pointerCursor(isEnabled: !webhookKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Remove key") {
+                    tomRelayCoordinator.removeWebhookKey()
+                    webhookKeyDraft = ""
+                }
+                .disabled(!tomRelayCoordinator.webhookKeyIsStored)
+                .pointerCursor(isEnabled: tomRelayCoordinator.webhookKeyIsStored)
+            }
+
+            Text("Reply topic")
+                .font(.callout)
+            SecureField("Reply topic", text: .constant(TomRelayStatusPresentation.maskedSecret))
+                .textFieldStyle(.roundedBorder)
+                .disabled(true)
+                .privacySensitive()
+                .help(TomRelayStatusPresentation.rotateTopicHelp)
+            Text(TomRelayStatusPresentation.rotateTopicHelp)
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Copy topic") {
+                    tomRelayCoordinator.copyReplyTopicToPasteboard()
+                }
+                .pointerCursor()
+                Button("Rotate topic") {
+                    tomRelayCoordinator.rotateReplyTopic()
+                }
+                .pointerCursor()
+                .help(TomRelayStatusPresentation.rotateTopicHelp)
+            }
+
+            TextField("Ask Tom about the plan, a rule, or this session", text: $askDraft)
+                .textFieldStyle(.roundedBorder)
+            Button(TomRelayStatusPresentation.askButtonTitle) {
+                companionManager.askTomFromStatusWindow(question: askDraft)
+                askDraft = ""
+            }
+            .disabled(!canAskTom)
+            .pointerCursor(isEnabled: canAskTom)
+            .help("At most 6 asks a session, 3 minutes apart. ChatGPT keeps answering on the hotkey.")
+
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                tomLiveStatus(now: timeline.date)
+            }
+
+            if let tomReviewText = tomRelayCoordinator.tomReviewText, !tomReviewText.isEmpty {
+                Text(TomRelayStatusPresentation.tomReviewLabel)
+                    .font(.headline)
+                Text(tomReviewText)
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let tomReviewRuleTag = tomRelayCoordinator.tomReviewRuleTag, !tomReviewRuleTag.isEmpty {
+                    Text(tomReviewRuleTag)
+                        .font(.callout)
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+
+            Button(TomRelayStatusPresentation.resendButtonTitle) {
+                tomRelayCoordinator.resendLastPayload()
+            }
+            .disabled(!tomRelayCoordinator.canResendSessionPayload)
+            .pointerCursor(isEnabled: tomRelayCoordinator.canResendSessionPayload)
+            .help("Posts the saved session payload again.")
+            if !tomRelayCoordinator.deliveryStatusMessage.isEmpty {
+                Text(tomRelayCoordinator.deliveryStatusMessage)
+                    .font(.callout)
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var canAskTom: Bool {
+        companionManager.isTomLensSwitchedOn
+            && !askDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func tomLiveStatus(now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if TomRelayStatusPresentation.isTomThinking(pendingAskIssuedAt: tomRelayCoordinator.pendingAskIssuedAt, now: now) {
+                Text(TomRelayStatusPresentation.tomIsThinkingLabel)
+                    .font(.body)
+            }
+            Text(TomRelayStatusPresentation.asksRemainingLabel(asksUsed: tomRelayCoordinator.asksUsedThisSession))
+                .font(.callout)
+                .foregroundStyle(Color.secondary)
+            Text(TomRelayStatusPresentation.ignoredRepliesLabel(count: tomRelayCoordinator.discardedReplyCount))
+                .font(.callout)
+                .foregroundStyle(Color.secondary)
         }
     }
 

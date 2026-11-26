@@ -316,7 +316,7 @@ final class ChatGPTSignInService: ObservableObject {
         guard let accessToken = try? await validPlanUsageAccessToken() else { return }
         var request = URLRequest(url: ChatGPTModelCatalog.modelsEndpoint)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (body, response) = try? await URLSession.shared.data(for: request),
+        guard let (body, response) = try? await Self.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return }
         availableModels = ChatGPTModelCatalog.listedModels(fromResponseBody: body)
         if let selectedModelSlug, availableModels.contains(where: { $0.slug == selectedModelSlug }) { return }
@@ -345,7 +345,7 @@ final class ChatGPTSignInService: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        let (responseBody, response) = try await URLSession.shared.data(for: request)
+        let (responseBody, response) = try await data(for: request)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard statusCode == 200 else {
             if ChatGPTSignInProtocol.isUnusableRefreshError(responseBody: responseBody) {
@@ -357,7 +357,7 @@ final class ChatGPTSignInService: ObservableObject {
     }
 
     private static func openIDConfiguration() async throws -> [String: Any] {
-        let (body, _) = try await URLSession.shared.data(from: ChatGPTSignInConfiguration.openIDConfigurationURL)
+        let (body, _) = try await data(from: ChatGPTSignInConfiguration.openIDConfigurationURL)
         guard let json = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
             throw ChatGPTSignInError.invalidIDToken("no OpenID configuration")
         }
@@ -371,7 +371,7 @@ final class ChatGPTSignInService: ObservableObject {
         guard let jwksURLString = configuration["jwks_uri"] as? String, let jwksURL = URL(string: jwksURLString) else {
             throw ChatGPTSignInError.invalidIDToken("no JWKS")
         }
-        let (jwksBody, _) = try await URLSession.shared.data(from: jwksURL)
+        let (jwksBody, _) = try await data(from: jwksURL)
         let jwks = (try? JSONSerialization.jsonObject(with: jwksBody) as? [String: Any])?["keys"] as? [[String: Any]] ?? []
         guard let matchingKey = jwks.first(where: { ($0["kid"] as? String) == decodedToken.keyID && ($0["kty"] as? String) == "RSA" }),
               let modulus = (matchingKey["n"] as? String).flatMap(ChatGPTSignInProtocol.base64URLDecodedData),
@@ -416,6 +416,17 @@ final class ChatGPTSignInService: ObservableObject {
             ("token_type_hint", "refresh_token"),
             ("client_id", record.issuedClientID),
         ])
-        _ = try? await URLSession.shared.data(for: request)
+        _ = try? await data(for: request)
+    }
+
+    private static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let url = request.url else { throw TomNetworkAllowlistError.urlNotAllowed }
+        try TomNetworkAllowlist.validate(url, configuredWebhookURL: nil)
+        return try await URLSession.shared.data(for: request)
+    }
+
+    private static func data(from url: URL) async throws -> (Data, URLResponse) {
+        try TomNetworkAllowlist.validate(url, configuredWebhookURL: nil)
+        return try await URLSession.shared.data(from: url)
     }
 }
