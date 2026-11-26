@@ -32,10 +32,13 @@ nonisolated enum TomFaceGeometry {
     static let highlightRed = 143.0 / 255.0
     static let highlightGreen = 209.0 / 255.0
     static let highlightBlue = 58.0 / 255.0
-    /// Red LED ovals, #C8102E.
-    static let eyeRed = 200.0 / 255.0
-    static let eyeGreen = 16.0 / 255.0
-    static let eyeBlue = 46.0 / 255.0
+    /// Dark red ovals, #B0141E, with a slightly darker rim.
+    static let eyeRed = 176.0 / 255.0
+    static let eyeGreen = 20.0 / 255.0
+    static let eyeBlue = 30.0 / 255.0
+    static let eyeRimRed = 122.0 / 255.0
+    static let eyeRimGreen = 12.0 / 255.0
+    static let eyeRimBlue = 18.0 / 255.0
     /// Darker green for the closed panel lines and the seam.
     static let earRed = 46.0 / 255.0
     static let earGreen = 110.0 / 255.0
@@ -53,17 +56,17 @@ nonisolated enum TomFaceGeometry {
     static let tileBlue = 30.0 / 255.0
 
     /// Fractions of the ball diameter. Positive Y is down.
-    /// Two small vertical ovals sit just above a lower-middle seam.
+    /// Eye centers are at 35% and 65% of the width, 45% of the height.
     /// Spacing is the gap between the ovals.
-    static let eyeCenterYFraction = -0.02
-    static let eyeSpacingFraction = 0.02
-    static let eyeWidthFraction = 0.055
-    static let eyeHeightFraction = 0.105
-    /// Wide shallow curve: the middle sits lower than the ends.
-    static let seamCenterYFraction = 0.12
-    static let seamHalfSpanFraction = 0.34
-    static let seamLiftFraction = 0.055
-    static let seamThicknessFraction = 0.018
+    static let eyeCenterYFraction = -0.05
+    static let eyeSpacingFraction = 0.26
+    static let eyeWidthFraction = 0.04
+    static let eyeHeightFraction = 0.075
+    /// Frown: highest in the middle (55% from the top) and lower at the rim.
+    static let seamCenterYFraction = 0.05
+    static let seamHalfSpanFraction = 0.50
+    static let seamDroopFraction = 0.11
+    static let seamThicknessFraction = 0.014
     /// Closed at rest. Listening holds them open; speaking flaps them.
     static let earRestDegrees = 0.0
     static let earOpenDegrees = 68.0

@@ -128,12 +128,12 @@ final class MenuBarPanelManager: NSObject {
     /// Two vertical ovals just above a seam whose ends rise. AppKit y is up,
     /// so the seam's lower middle is a smaller y than its ends.
     private static func drawMenuBarMark(in faceRect: NSRect, knockedOut: Bool) {
-        let eyeWidth = max(1.2, faceRect.width * 0.10)
-        let eyeHeight = max(2.0, faceRect.height * 0.16)
-        let gap = faceRect.width * 0.03
-        let halfSpan = (eyeWidth + gap) / 2
-        let eyeCenterY = faceRect.midY - faceRect.height * 0.02
-        for centerX in [faceRect.midX - halfSpan, faceRect.midX + halfSpan] {
+        let eyeWidth = max(1.1, faceRect.width * 0.07)
+        let eyeHeight = max(1.8, faceRect.height * 0.12)
+        let leftCenter = faceRect.minX + faceRect.width * 0.35
+        let rightCenter = faceRect.minX + faceRect.width * 0.65
+        let eyeCenterY = faceRect.maxY - faceRect.height * 0.45
+        for centerX in [leftCenter, rightCenter] {
             let eye = NSBezierPath(ovalIn: NSRect(
                 x: centerX - eyeWidth / 2,
                 y: eyeCenterY - eyeHeight / 2,
@@ -152,14 +152,14 @@ final class MenuBarPanelManager: NSObject {
             }
         }
         let seam = NSBezierPath()
-        let span = faceRect.width * 0.28
-        let midY = faceRect.midY - faceRect.height * 0.10
-        let endY = midY + faceRect.height * 0.06
+        let span = faceRect.width * 0.50
+        let midY = faceRect.maxY - faceRect.height * 0.55
+        let endY = midY - faceRect.height * 0.10
         seam.move(to: CGPoint(x: faceRect.midX - span, y: endY))
         seam.curve(
             to: CGPoint(x: faceRect.midX + span, y: endY),
-            controlPoint1: CGPoint(x: faceRect.midX - span * 0.35, y: midY),
-            controlPoint2: CGPoint(x: faceRect.midX + span * 0.35, y: midY)
+            controlPoint1: CGPoint(x: faceRect.midX - span * 0.45, y: midY),
+            controlPoint2: CGPoint(x: faceRect.midX + span * 0.45, y: midY)
         )
         seam.lineWidth = 1.1
         if knockedOut {

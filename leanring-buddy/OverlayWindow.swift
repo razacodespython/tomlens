@@ -693,12 +693,6 @@ private struct TomFaceView: View {
 
     var body: some View {
         ZStack {
-            if pose.showsPulse {
-                Circle()
-                    .stroke(faceGreen.opacity(0.40), lineWidth: 2)
-                    .frame(width: diameter, height: diameter)
-                    .scaleEffect(CGFloat(pose.pulseScale))
-            }
             earPanel(side: -1)
             earPanel(side: 1)
             Circle()
@@ -727,11 +721,7 @@ private struct TomFaceView: View {
     @ViewBuilder
     private func earPanel(side: CGFloat) -> some View {
         if pose.earFlapDegrees < 8 {
-            Capsule()
-                .fill(earLine)
-                .frame(width: diameter * 0.018, height: diameter * 0.16)
-                .rotationEffect(.degrees(Double(side) * -42))
-                .offset(x: side * diameter * 0.32, y: -diameter * 0.26)
+            closedEarLine(side: side)
         } else {
             RoundedRectangle(cornerRadius: diameter * 0.06, style: .continuous)
                 .fill(earInterior)
@@ -745,15 +735,26 @@ private struct TomFaceView: View {
         }
     }
 
+    private func closedEarLine(side: CGFloat) -> some View {
+        let start = CGPoint(x: side * diameter * 0.045, y: -diameter * 0.40)
+        let end = CGPoint(x: side * diameter * 0.24, y: -diameter * 0.13)
+        let control = CGPoint(x: side * diameter * 0.16, y: -diameter * 0.30)
+        return Path { path in
+            path.move(to: start)
+            path.addQuadCurve(to: end, control: control)
+        }
+        .stroke(earLine, style: StrokeStyle(lineWidth: max(1, diameter * 0.016), lineCap: .round))
+    }
+
     private var seam: some View {
         let span = diameter * CGFloat(TomFaceGeometry.seamHalfSpanFraction)
         let midY = diameter * CGFloat(TomFaceGeometry.seamCenterYFraction)
-        let lift = diameter * CGFloat(TomFaceGeometry.seamLiftFraction)
+        let droop = diameter * CGFloat(TomFaceGeometry.seamDroopFraction)
         return Path { path in
-            path.move(to: CGPoint(x: -span, y: midY - lift))
+            path.move(to: CGPoint(x: -span, y: midY + droop))
             path.addQuadCurve(
-                to: CGPoint(x: span, y: midY - lift),
-                control: CGPoint(x: 0, y: midY + lift)
+                to: CGPoint(x: span, y: midY + droop),
+                control: CGPoint(x: 0, y: midY - droop)
             )
         }
         .stroke(
@@ -775,12 +776,22 @@ private struct TomFaceView: View {
     }
 
     private var eye: some View {
-        Ellipse()
-            .fill(ledColor)
-            .frame(
-                width: diameter * CGFloat(TomFaceGeometry.eyeWidthFraction * pose.eyeScaleX),
-                height: diameter * CGFloat(TomFaceGeometry.eyeHeightFraction * pose.eyeScaleY)
-            )
+        let width = diameter * CGFloat(TomFaceGeometry.eyeWidthFraction * pose.eyeScaleX)
+        let height = diameter * CGFloat(TomFaceGeometry.eyeHeightFraction * pose.eyeScaleY)
+        let rim = Color(red: TomFaceGeometry.eyeRimRed, green: TomFaceGeometry.eyeRimGreen, blue: TomFaceGeometry.eyeRimBlue)
+        return ZStack {
+            if pose.showsPulse {
+                Ellipse()
+                    .fill(ledColor.opacity(0.35))
+                    .frame(width: width * 1.8, height: height * 1.45)
+            }
+            Ellipse()
+                .fill(rim)
+                .frame(width: width * 1.28, height: height * 1.18)
+            Ellipse()
+                .fill(ledColor)
+                .frame(width: width, height: height)
+        }
     }
 }
 
